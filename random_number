@@ -1,0 +1,26 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
+int main()
+{
+    srand(time(NULL));
+    int secret = rand()%10;
+    int n;
+    int count =0;
+    printf("%d\n",secret);
+
+    do{
+        printf("Enter number to guess: ");
+        scanf("%d",&n);
+        count++;
+        if(n<secret){
+            printf("more than %d\n",n);
+        }
+        if(n>secret){
+            printf("less than %d\n",n);
+        }
+    }while(n != secret);
+
+    printf("Congrats! number :%d",secret);
+    printf("\n%d",count);
+}
