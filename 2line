@@ -1,0 +1,160 @@
+String result1, result2, result3, result4, result5, result6, result7, result8;
+String line1, line2, line3, line4, line5, line6, line7, line8;
+const int MAX_ARRAY_SIZE = 100;  // Define the maximum size of your byteArray
+
+void setup() {
+  // put your setup code here, to run once:
+  Serial.begin(115200);
+
+}
+
+void loop() {
+  static uint8_t byteArray[MAX_ARRAY_SIZE];
+  static int arrayIndex = 0;
+
+  while (Serial.available()) {
+    delay(3);  //delay to allow buffer to fill
+
+    if (Serial.available() > 0) {
+      if (arrayIndex < MAX_ARRAY_SIZE) {
+        uint8_t incomingByte = Serial.read();  //gets one byte from serial buffer
+        byteArray[arrayIndex] = incomingByte;
+        arrayIndex++;
+      } else {
+        // The buffer is full, might want to handle this case or just read and discard the byte
+        Serial.read();
+      }
+    }
+  }
+
+  if (arrayIndex > 0) {
+    String decodedString = decodeUint8ArrayToString(byteArray, arrayIndex);
+
+    splitnewline(decodedString);
+    split(line1);
+    //Print input 
+    Serial.print(result1);
+    Serial.print(":");
+    Serial.print(result2);
+    Serial.print(":");
+    Serial.print(result3);
+    Serial.print(":");
+    Serial.println(result4);
+    // Serial.print(":");             //uncomment for display result5-8 and change Serial.println(result4) to Serial.print(result4)
+    // Serial.print(result5);
+    // Serial.print(":");
+    // Serial.print(result6);
+    // Serial.print(":");
+    // Serial.print(result7);
+    // Serial.print(":");
+    // Serial.println(result8);
+
+    // Resetting the buffer and index after processing
+    memset(byteArray, 0, MAX_ARRAY_SIZE);  // Clear the buffer
+    arrayIndex = 0;                        // Reset the index
+  }
+  
+}
+
+String decodeUint8ArrayToString(uint8_t* byteArray, int length) {
+  String decodedString = "";
+  for (int i = 0; i < length; i++) {
+    char character = (char)byteArray[i];  // Convert the byte to a char
+    decodedString += character;           // Concatenate the character to the string
+  }
+  return decodedString;
+}
+
+void split(String input) {
+  // Convert the String to a char array (C-string)
+  char char_array[input.length()];
+  input.toCharArray(char_array, input.length());
+
+  // Initialize strtok with the delimiter ":"
+  char* token = strtok(char_array, ":");
+
+  // Variables to store the results
+  result1 = "";
+  result2 = "";
+  result3 = "";
+  result4 = "";
+  result5 = "";
+  result6 = "";
+  result7 = "";
+  result8 = "";
+
+
+  // Loop through the tokens and extract the values
+  int count = 0;
+  while (token != NULL) {
+    if (count == 0) {
+      result1 = String(token);
+    } else if (count == 1) {
+      result2 = String(token);
+    } else if (count == 2) {
+      result3 = String(token);
+    } else if (count == 3) {
+      result4 = String(token);
+    } else if (count == 4) {
+      result5 = String(token);
+    } else if (count == 5) {
+      result6 = String(token);
+    } else if (count == 6) {
+      result7 = String(token);
+    } else if (count == 7) {
+      result8 = String(token);
+    } else {
+      // return;
+    }
+    token = strtok(NULL, ":");
+    count++;
+  }
+  
+}
+
+void splitnewline(String Allmessage) {
+  // Convert the String to a char array (C-string)
+  char char_Allmessage[Allmessage.length()+1];
+  Allmessage.toCharArray(char_Allmessage, Allmessage.length());
+
+  // Initialize strtok with the delimiter ":"
+  char* tokennewline = strtok(char_Allmessage, "\n");
+
+  // Variables to store the results
+  line1 = "";
+  line2 = "";
+  line3 = "";
+  line4 = "";
+  line5 = "";
+  line6 = "";
+  line7 = "";
+  line8 = "";
+
+
+  // Loop through the tokens and extract the values
+  int line = 0;
+  while (tokennewline != NULL) {
+    if (line == 0) {
+      line1 = String(tokennewline);
+    } else if (line == 1) {
+      line2 = String(tokennewline);
+    } else if (line == 2) {
+      line3 = String(tokennewline);
+    } else if (line == 3) {
+      line4 = String(tokennewline);
+    } else if (line == 4) {
+      line5 = String(tokennewline);
+    } else if (line == 5) {
+      line6 = String(tokennewline);
+    } else if (line == 6) {
+      line7 = String(tokennewline);
+    } else if (line == 7) {
+      line8 = String(tokennewline);
+    } else {
+      // return;
+    }
+    tokennewline = strtok(NULL, "\n");
+    line++;
+  }
+  
+}
