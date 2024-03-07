@@ -1,0 +1,455 @@
+// include library
+#include <Arduino.h>
+#include <Servo.h>
+#include <dht.h>
+#include <OneWire.h>
+#include <DallasTemperature.h>
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+#include <SPI.h>
+#include <Adafruit_Sensor.h>
+#include <Adafruit_BME280.h>
+#include "TM1637.h"
+
+//define buffer size 
+#define COMMAND_BUFFER_SIZE 70
+
+//define variable function
+#define analog_read     "n"
+#define digital_read    "m"
+#define digital_write   "o"
+#define analog_write    "p"
+#define servo_control   "l"
+#define DHTsensor       "i"
+#define DS18B20_sensor  "j"
+#define TMP36_sensor    "h"
+#define seg_digit       "e"
+#define RGB_LED         "f"
+#define ultrasonic      "k"
+#define microphone      "x"
+#define BME280_sensor   "q"
+#define LCD             "g"
+#define GetAddressI2C   "get_i2c_address"
+
+//define variable to use BME280_sensor library
+#define BME_SCK   13
+#define BME_MISO  12
+#define BME_MOSI  11
+#define BME_CS    10
+
+// Global variable to use many functions
+dht               DHT;
+Servo             servo_motor;  
+Adafruit_BME280   bme; 
+bool Readsound;
+int analogpinSound;
+String argument2 ;
+int pin, pin2, pin3;        // Number of pin
+
+void setup() {
+  Serial.begin(115200);
+}
+
+void loop() {
+  static char commandBuffer[COMMAND_BUFFER_SIZE];
+  static uint8_t index = 0;
+
+  if (Readsound == HIGH) {
+    Sound(analogpinSound, argument2);  // can use blink without delay for system useable
+  }
+
+  while (Serial.available() > 0) {
+    delay(3);
+    char receivedChar = Serial.read();
+
+    if (receivedChar == '\n') {
+      // End of command, process it
+      commandBuffer[index] = '\0';  // Null-terminate the string
+      processCommand(String(commandBuffer));
+
+      // Reset the buffer for the next command
+      index = 0;
+    } else {
+      // Add character to the buffer
+      if (index < COMMAND_BUFFER_SIZE - 1) {
+        commandBuffer[index++] = receivedChar;
+      } else {
+        // Buffer overflow, reset index
+        index = 0;
+      }
+    }
+  }
+}
+
+void processCommand(String command) {
+  // Get position of colons
+  int firstColonIndex = command.indexOf(':');
+  int secondColonIndex = command.indexOf(':', firstColonIndex + 1);
+  int thirdColonIndex = command.indexOf(':', secondColonIndex + 1);
+  int fourthColonIndex = command.indexOf(':', thirdColonIndex + 1);
+  int fifthColonIndex = command.indexOf(':', fourthColonIndex + 1);
+  int sixthColonIndex = command.indexOf(':', fifthColonIndex + 1);
+  int seventhColonIndex = command.indexOf(':', sixthColonIndex + 1);
+  int eightColonIndex = command.indexOf(':', seventhColonIndex + 1);
+
+
+  // if there are not enough colons, return error
+  if (firstColonIndex == -1 || secondColonIndex == -1) {
+    sendError("unknown", "0", "Invalid command format");
+    return;
+  }
+
+  // Storing data between colons in variables
+  String argument1 = command.substring(0, firstColonIndex);
+  String argument2 = command.substring(firstColonIndex + 1, secondColonIndex);
+  String argument3 = command.substring(secondColonIndex + 1, thirdColonIndex);
+  String argument4 = command.substring(thirdColonIndex + 1, fourthColonIndex);
+  String argument5 = command.substring(fourthColonIndex + 1, fifthColonIndex);
+  String argument6 = command.substring(fifthColonIndex + 1, sixthColonIndex);
+  String argument7 = command.substring(sixthColonIndex + 1, seventhColonIndex);
+  String argument8 = command.substring(seventhColonIndex + 1, eightColonIndex);
+
+  // convert String data between colons to int for control variable output in function
+  int int_argument3 = argument3.toInt();
+  int int_argument4 = argument4.toInt();
+  int int_argument5 = argument5.toInt();
+  int int_argument6 = argument6.toInt();
+  int int_argument7 = argument7.toInt();
+  int int_argument8 = argument8.toInt();
+
+  // Execute command based on commandName
+  bool success = false;
+
+  // Change to if else for easier understanding
+  if (argument1 == digital_read) {
+    extractpinNumber(argument3);
+    Read_Digital(pin, argument2);  // Update success based on command execution
+    // ...
+  } else if (argument1 == analog_read) {
+    extractpinNumber(argument3);
+    Read_Analog(pin, argument2);
+    // ...
+  } else if (argument1 == digital_write) {
+    extractpinNumber(argument3);
+    DigitalWrite(pin, int_argument4, argument2);
+    // ...
+  } else if (argument1 == analog_write) {
+    extractpinNumber(argument3);
+    AnalogWrite(pin, int_argument4, argument2);
+    // ...
+  } else if (argument1 == servo_control) {
+    extractpinNumber(argument3);
+    Servo(pin, int_argument4, argument2);
+    // ...
+  } else if (argument1 == TMP36_sensor) {
+    extractpinNumber(argument3);
+    TMP36(pin, argument2);
+    // ...
+  } else if (argument1 == seg_digit) {
+    extractpinNumber(argument3);
+    extractpinNumber2(argument4);
+    segdigit(pin, pin2, argument5, argument2);
+    // ...
+  } else if (argument1 == ultrasonic) {
+    extractpinNumber(argument3);
+    extractpinNumber2(argument4);
+    Sonarsensor(pin, pin2, argument2);
+    // ...
+  } else if (argument1 == DHTsensor) {
+    extractpinNumber(argument3);
+    DHT_sensor(pin, int_argument4, argument2);
+    // ...
+  } else if (argument1 == DS18B20_sensor) {
+    extractpinNumber(argument3);
+    DS18B20(pin, argument2);
+    // ...
+  }else if (argument1 == RGB_LED) {
+    extractpinNumber(argument3);
+    extractpinNumber2(argument4);
+    extractpinNumber3(argument5);
+    LED_RGB(pin,pin2,pin3,int_argument6,int_argument7,int_argument8,argument2);
+    // ...
+  } else if (argument1 == microphone) {
+    extractpinNumber(argument3);
+    if(int_argument4 == 1){
+      Readsound = HIGH;               //func
+      analogpinSound = pin;           //pin out of loop serial
+      //Sound(analogPin);
+    }
+    if(int_argument4 == 0){
+      Readsound = LOW;                //func
+      analogpinSound = NULL;          //pin out of loop serial
+    }
+    // ...
+  } else if (argument1 == GetAddressI2C) {
+    addressI2C(argument2);
+    // ...
+  } else if (argument1 == LCD) {
+    int numberA = (int)strtol(&argument3[0], NULL, 16);
+    LiquidCrystal(numberA, argument4, argument5, argument2);
+    // ...
+  } else if (argument1 == BME280_sensor) {
+    int numberB = (int)strtol(&argument3[0], NULL, 16);
+    BME280(numberB, int_argument4, int_argument5, argument2);
+    // ...
+  } else {
+    // Unknown command
+    sendError(argument1, argument2, "Unknown command");
+    return;
+  }
+
+  // Send feedback
+  sendFeedback(argument1, argument2, success);
+}
+
+void sendFeedback(String argument1, String argument2, bool success) {
+  String feedback = argument1 + ":" + argument2 + ":" + (success ? "1" : "0") + "\n";
+  //Serial.println(feedback);
+}
+
+void sendError(String commandName, String commandId, String errorMessage) {
+  String feedback = commandName + ":" + commandId + ":0:" + errorMessage + "\n";
+  //Serial.println(feedback);
+}
+
+void extractpinNumber(String input) {
+  String resultStr = "";
+
+  // Iterate through each character in the input string
+  for (int i = 0; i < input.length(); i++) {
+    // Check if the character is a digit
+    if (isDigit(input.charAt(i))) {
+      // Append the digit to the result string
+      resultStr += input.charAt(i);
+    }
+  }
+
+  // Convert the result string to an integer
+  pin = resultStr.toInt();
+}
+
+void extractpinNumber2(String input2) {
+  String resultStr2 = "";
+
+  // Iterate through each character in the input string
+  for (int j = 0; j < input2.length(); j++) {
+    // Check if the character is a digit
+    if (isDigit(input2.charAt(j))) {
+      // Append the digit to the result string
+      resultStr2 += input2.charAt(j);
+    }
+  }
+
+  // Convert the result string to an integer
+  pin2 = resultStr2.toInt();
+}
+
+void extractpinNumber3(String input3) {
+  String resultStr3 = "";
+
+  // Iterate through each character in the input string
+  for (int k = 0; k < input3.length(); k++) {
+    // Check if the character is a digit
+    if (isDigit(input3.charAt(k))) {
+      // Append the digit to the result string
+      resultStr3 += input3.charAt(k);
+    }
+  }
+
+  // Convert the result string to an integer
+  pin3 = resultStr3.toInt();
+}
+
+void Read_Digital(int pinRdigital, String result2) {
+  pinMode(pinRdigital, INPUT);
+  // Serial.print("m:");
+  // Serial.print(":");
+  // Serial.print(commandId);
+  // Serial.print(":");
+  // Serial.println(digitalRead(pinRdigital));
+  String result = String(digital_read) + ":" + String(result2) + ":" + String(digitalRead(pinRdigital));
+  Serial.println(result);
+  // Assuming the command execution is successful
+}
+
+void Read_Analog(int pinRanalog, String result2) {
+  pinMode(pinRanalog, INPUT);
+  String result = String(analog_read) + ":" + String(result2) + ":" + String(analogRead(pinRanalog));
+  Serial.println(result);
+  // Assuming the command execution is successful
+}
+
+void DigitalWrite(int pinDW, int BL, String result2) {
+  pinMode(pinDW, OUTPUT);
+  digitalWrite(pinDW, BL);
+  String result = String(digital_write) + ":" + String(result2) + ":" + String(BL);
+  Serial.println(result);
+}
+
+void AnalogWrite(int pinAW, int Value, String result2) {
+  pinMode(pinAW, OUTPUT);
+  analogWrite(pinAW, Value);
+  String result = String(analog_write) + ":" + String(result2) + ":" + String(Value);
+  Serial.println(result);
+}
+
+void Servo(int pinServo, int angle, String result2) {
+  servo_motor.attach(pinServo);
+  servo_motor.write(angle);
+  String result = String(servo_control) + ":" + String(result2) + ":" + String(angle);
+  Serial.println(result);
+}
+
+void TMP36(int sensePin, String result2) {
+  pinMode(sensePin, INPUT);
+  int sensorInput = analogRead(sensePin);
+  int temp36 = (((((double)sensorInput / 1024) * 5) - 0.5) * 100);
+  String result = String(TMP36_sensor) + ":" + String(result2) + ":" + String(temp36);
+  Serial.println(result);
+}
+
+void segdigit(int clock, int DigitalIO, String num, String result2) {  //BRIGHT
+  int number = num.toInt();
+  TM1637 tm1637(clock, DigitalIO);
+  tm1637.init();
+  tm1637.set(BRIGHT_TYPICAL);
+  tm1637.displayNum(number);
+  if (num != "end") {
+    if (number != 0) {
+      tm1637.displayNum(number);
+    }
+    if (number == 0) {
+      tm1637.display(3, number);
+    }
+  }
+  if (num == "end") {
+    digitalWrite(clock, LOW);
+    digitalWrite(DigitalIO, LOW);
+  }
+  String result = String(seg_digit) + ":" + String(result2) + ":" + String(number);
+  Serial.println(result);
+}
+
+void Sonarsensor(int trigPin, int echoPin, String result2) {  //HC-SR04 Ultrasonic sensor
+  float duration, distance;
+  pinMode(trigPin, OUTPUT);
+  pinMode(echoPin, INPUT);
+  digitalWrite(trigPin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(trigPin, HIGH);  // Sets the trigPin on HIGH state for 10 micro seconds
+  delayMicroseconds(10);
+  digitalWrite(trigPin, LOW);
+  duration = pulseIn(echoPin, HIGH);  // Reads the echoPin, returns the sound wave travel time in microseconds
+  distance = duration * 0.0343 / 2;   // Calculating the distance
+  String result = String(ultrasonic) + ":" + String(result2) + ":" + String(distance);
+  Serial.println(result);
+}
+
+void DHT_sensor(int PinDig, int mode, String result2) {
+  int DHT11_PIN = PinDig;
+  int chk = DHT.read11(DHT11_PIN);
+  if (mode == 1) {
+    String result = String(DHTsensor) + ":" + String(result2) + ":" + String(DHT.temperature);
+    Serial.println(result);  //celsius unit
+  } else if (mode == 2) {
+    String result = String(DHTsensor) + ":" + String(result2) + ":" + String(DHT.humidity);
+    Serial.println(result);
+  }
+}
+
+void DS18B20(int temperatureSensorPin, String result2) {
+  int ONE_WIRE_BUS = temperatureSensorPin;
+  OneWire oneWire(ONE_WIRE_BUS);
+  DallasTemperature sensors(&oneWire);
+  sensors.requestTemperatures();
+  String result = String(DS18B20_sensor) + ":" + String(result2) + ":" + String(sensors.getTempCByIndex(0));
+  Serial.println(result);
+}
+
+void LED_RGB(int pRed, int pGreen, int pBlue, int Vred, int Vgreen, int Vblue, String result2) {
+  pinMode(pRed, OUTPUT);
+  pinMode(pGreen, OUTPUT);
+  pinMode(pBlue, OUTPUT);
+  analogWrite(pRed, Vred);
+  analogWrite(pGreen, Vgreen);
+  analogWrite(pBlue, Vblue);
+  String result = String(RGB_LED) + ":" + String(result2) + ":" + String(pRed) + ":" + String(pGreen) + ":" + String(pBlue);
+  Serial.println(result);
+}
+
+void Sound(int pinS, String result2) {
+  pinMode(pinS, INPUT);
+  String result = String(microphone) + ":" + String(result2) + ":" + String(analogRead(pinS));
+  Serial.println(result);
+}
+
+void addressI2C(String result2) {
+  Serial.print("get_i2c_address:");
+  Serial.print(result2);
+  // Serial.print(":");
+  Wire.begin();
+  // Serial.println("I2C Scanner");
+  byte error, address;
+  int nDevices = 0;
+
+  for (address = 1; address < 127; address++) {
+    Wire.beginTransmission(address);
+    error = Wire.endTransmission();
+
+    if (error == 0) {
+      Serial.print(":");
+      Serial.print("0x");  //I2C device found at address
+      if (address < 16)
+        Serial.print("0");
+      // String addressi2c =
+      Serial.print(address, HEX);
+      // Serial.print(":");
+
+      nDevices++;
+    } else if (error == 4) {
+      Serial.print("Unknown error at address 0x");
+      if (address < 16)
+        Serial.print("0");
+
+      Serial.println(address, HEX);
+    }
+  }
+
+  if (nDevices == 0) {
+    Serial.println("No I2C devices found");
+  }
+  Serial.println();
+}
+
+void LiquidCrystal(int address, String message1, String message2, String result2) {
+  LiquidCrystal_I2C lcd(address, 16, 2);
+  lcd.begin();
+  lcd.backlight();
+  lcd.setCursor(0, 0);
+  // lcd.print(space);
+  lcd.print(message1);
+  lcd.setCursor(0, 1);
+  lcd.print(message2);
+  String result = String(LCD) + ":" + String(result2) + ":" + String(message1) + ":" + String(message2);
+  Serial.println(result);
+}
+
+void BME280(int add1, int sec, int SEALEVELPRESSURE_HPA, String result2) {
+  unsigned status;
+  status = bme.begin(add1);
+  if (sec == 1) {
+    String result = String(BME280_sensor) + ":" + String(result2) + ":" + String(bme.readTemperature()); // Temperature  C
+    Serial.println(result);  
+  } else if (sec == 2) {
+    String result = String(BME280_sensor) + ":" + String(result2) + ":" + String(bme.readPressure() / 100.0F); // Pressure hPa
+    Serial.println(result); 
+  } else if (sec == 3) {
+    String result = String(BME280_sensor) + ":" + String(result2) + ":" + String(bme.readAltitude(SEALEVELPRESSURE_HPA)); // Approx. Altitude  m
+    Serial.println(result);
+  } else if (sec == 4) {
+    String result = String(BME280_sensor) + ":" + String(result2) + ":" + String(bme.readHumidity()); // Humidity %
+    Serial.println(result);
+  } else {
+    //do nothing
+  }
+}
