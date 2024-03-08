@@ -1,0 +1,135 @@
+// include library
+#include <Arduino.h>
+// Add a global variable to control feedback
+bool feedbackEnabled = false;
+
+//define buffer size
+#define COMMAND_BUFFER_SIZE 70
+
+//define variable function
+#define analog_read "n"
+#define digital_read "m"
+
+bool Readsound;
+int analogpinSound;
+String argument2;
+int pin, pin2, pin3;  // Number of pin
+
+void setup() {
+  Serial.begin(115200);
+}
+
+void loop() {
+  static char commandBuffer[COMMAND_BUFFER_SIZE];
+  static uint8_t index = 0;
+
+
+  while (Serial.available() > 0) {
+    delay(3);
+    char receivedChar = Serial.read();
+
+    if (receivedChar == '\n') {
+      // End of command, process it
+      commandBuffer[index] = '\0';  // Null-terminate the string
+      processCommand(String(commandBuffer));
+
+      // Reset the buffer for the next command
+      index = 0;
+    } else {
+      // Add character to the buffer
+      if (index < COMMAND_BUFFER_SIZE - 1) {
+        commandBuffer[index++] = receivedChar;
+      } else {
+        // Buffer overflow, reset index
+        index = 0;
+      }
+    }
+  }
+
+  // Check if feedback is enabled and send continuous feedback
+  if (feedbackEnabled) {
+    // Variables will change:
+    int ledState = LOW;  // ledState used to set the LED
+
+    // Generally, you should use "unsigned long" for variables that hold time
+    // The value will quickly become too large for an int to store
+    unsigned long previousMillis = 0;  // will store last time LED was updated
+
+    // constants won't change:
+    const long interval = 1000;  // interval at which to blink (milliseconds)
+      // Add your continuous feedback logic here
+      // For example, you can call a function that sends feedback
+      // based on the last received command.
+
+    unsigned long currentMillis = millis();
+
+  if (currentMillis - previousMillis >= interval) {
+    // save the last time you blinked the LED
+    previousMillis = currentMillis;
+    digitalWrite(ledPin, ledState);
+  }
+
+  }
+}
+
+void processCommand(String command) {
+  // ... (existing code)
+  int firstColonIndex = command.indexOf(':');
+  int secondColonIndex = command.indexOf(':', firstColonIndex + 1);
+  int thirdColonIndex = command.indexOf(':', secondColonIndex + 1);
+  int fourthColonIndex = command.indexOf(':', thirdColonIndex + 1);
+  int fifthColonIndex = command.indexOf(':', fourthColonIndex + 1);
+  // Execute command based on commandName
+  bool success = false;
+
+  // Storing data between colons in variables
+  String argument1 = command.substring(0, firstColonIndex);
+  String argument2 = command.substring(firstColonIndex + 1, secondColonIndex);
+  String argument3 = command.substring(secondColonIndex + 1, thirdColonIndex);
+  String argument4 = command.substring(thirdColonIndex + 1, fourthColonIndex);
+
+  // convert String data between colons to int for control variable output in function
+  int int_argument3 = argument3.toInt();
+  int int_argument4 = argument4.toInt();
+
+  if (argument1 == digital_read) {
+    extractpinNumber(argument3);
+    Read_Digital(pin, argument2, int_argument4);  // Pass the command value to enable/disable feedback
+    // ...
+  } else {
+    // Other command handling
+  }
+
+  // Send feedback if required
+  if (feedbackEnabled) {
+    //sendFeedback(argument1, argument2, success);
+  }
+}
+
+void Read_Digital(int pinRdigital, String result2, int feedbackCommand) {
+  pinMode(pinRdigital, INPUT);
+  String result = String(digital_read) + ":" + String(result2) + ":" + String(digitalRead(pinRdigital));
+  Serial.println(result);
+
+  // Enable or disable feedback based on the command value
+  feedbackEnabled = (feedbackCommand == 1);
+
+  // Assuming the command execution is successful
+}
+
+void extractpinNumber(String input) {
+  String resultStr = "";
+
+  // Iterate through each character in the input string
+  for (int i = 0; i < input.length(); i++) {
+    // Check if the character is a digit
+    if (isDigit(input.charAt(i))) {
+      // Append the digit to the result string
+      resultStr += input.charAt(i);
+    }
+  }
+
+  // Convert the result string to an integer
+  pin = resultStr.toInt();
+}
+
