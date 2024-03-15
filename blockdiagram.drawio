@@ -1,6 +1,6 @@
-<mxfile host="app.diagrams.net" modified="2024-03-15T08:44:50.238Z" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36" etag="wiJkcfqdtFYpAiLFMOdO" version="24.0.6" type="github">
+<mxfile host="app.diagrams.net" modified="2024-03-15T08:55:59.790Z" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36" etag="0BKJ1wh_mkQ7GjVXcIMN" version="24.0.6" type="github">
   <diagram name="หน้า-1" id="LU75V2yqk5B9vrltkOxm">
-    <mxGraphModel dx="614" dy="265" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+    <mxGraphModel dx="890" dy="384" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -8,19 +8,21 @@
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="owQXQ0iBZrBvaK-vxQ6I-1" value="PID controller" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
-          <mxGeometry x="240" y="80" width="80" height="60" as="geometry" />
+          <mxGeometry x="220" y="80" width="80" height="60" as="geometry" />
         </mxCell>
-        <mxCell id="_LV9zHHMWyS-oksBHVtJ-6" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="owQXQ0iBZrBvaK-vxQ6I-2" target="_LV9zHHMWyS-oksBHVtJ-5">
-          <mxGeometry relative="1" as="geometry" />
+        <mxCell id="_LV9zHHMWyS-oksBHVtJ-6" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="owQXQ0iBZrBvaK-vxQ6I-2">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="700" y="110" as="targetPoint" />
+          </mxGeometry>
         </mxCell>
-        <mxCell id="owQXQ0iBZrBvaK-vxQ6I-2" value="Themoelectric cooler peltier" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
-          <mxGeometry x="490" y="80" width="80" height="60" as="geometry" />
+        <mxCell id="owQXQ0iBZrBvaK-vxQ6I-2" value="Themoelectric cooler peltier&lt;div&gt;and DC Fan&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+          <mxGeometry x="510" y="80" width="80" height="60" as="geometry" />
         </mxCell>
         <mxCell id="_LV9zHHMWyS-oksBHVtJ-4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" edge="1" parent="1" source="owQXQ0iBZrBvaK-vxQ6I-4" target="owQXQ0iBZrBvaK-vxQ6I-5">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="owQXQ0iBZrBvaK-vxQ6I-4" value="Temperature sensor" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
-          <mxGeometry x="320" y="210" width="80" height="60" as="geometry" />
+          <mxGeometry x="370" y="210" width="80" height="60" as="geometry" />
         </mxCell>
         <mxCell id="owQXQ0iBZrBvaK-vxQ6I-7" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" parent="1" source="owQXQ0iBZrBvaK-vxQ6I-5" target="owQXQ0iBZrBvaK-vxQ6I-1" edge="1">
           <mxGeometry relative="1" as="geometry" />
@@ -43,20 +45,38 @@
             <mxPoint x="360" y="160" as="targetPoint" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="_LV9zHHMWyS-oksBHVtJ-5" value="DC Fan" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
-          <mxGeometry x="590" y="80" width="80" height="60" as="geometry" />
-        </mxCell>
         <mxCell id="_LV9zHHMWyS-oksBHVtJ-8" value="&lt;font style=&quot;font-size: 11px;&quot;&gt;Temperature feedback from sensor&lt;/font&gt;" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
-          <mxGeometry x="80" y="160" width="100" height="40" as="geometry" />
+          <mxGeometry x="80" y="160" width="90" height="40" as="geometry" />
         </mxCell>
-        <mxCell id="_LV9zHHMWyS-oksBHVtJ-9" value="&lt;font style=&quot;font-size: 11px;&quot;&gt;Error&lt;/font&gt;" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
-          <mxGeometry x="180" y="80" width="40" height="30" as="geometry" />
+        <mxCell id="_LV9zHHMWyS-oksBHVtJ-9" value="&lt;font style=&quot;font-size: 11px;&quot;&gt;PID output&lt;/font&gt;" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+          <mxGeometry x="300" y="85" width="60" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="_LV9zHHMWyS-oksBHVtJ-14" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="_LV9zHHMWyS-oksBHVtJ-10" target="owQXQ0iBZrBvaK-vxQ6I-2">
+          <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="_LV9zHHMWyS-oksBHVtJ-10" value="PWM Generator" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
-          <mxGeometry x="380" y="80" width="80" height="60" as="geometry" />
+          <mxGeometry x="370" y="80" width="80" height="60" as="geometry" />
         </mxCell>
-        <mxCell id="_LV9zHHMWyS-oksBHVtJ-12" value="&lt;span style=&quot;font-size: 11px;&quot;&gt;output&lt;/span&gt;" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
-          <mxGeometry x="330" y="80" width="40" height="30" as="geometry" />
+        <mxCell id="_LV9zHHMWyS-oksBHVtJ-13" value="Autual&#xa;Temperature" style="text;whiteSpace=wrap;" vertex="1" parent="1">
+          <mxGeometry x="610" y="70" width="40" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="_LV9zHHMWyS-oksBHVtJ-16" value="&lt;font style=&quot;font-size: 11px;&quot;&gt;Error&lt;/font&gt;" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+          <mxGeometry x="180" y="85" width="40" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="_LV9zHHMWyS-oksBHVtJ-17" value="" style="endArrow=none;html=1;rounded=0;" edge="1" parent="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="650" y="240" as="sourcePoint" />
+            <mxPoint x="650" y="110" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="_LV9zHHMWyS-oksBHVtJ-18" value="" style="endArrow=classic;html=1;rounded=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" target="owQXQ0iBZrBvaK-vxQ6I-4">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="650" y="240" as="sourcePoint" />
+            <mxPoint x="560" y="160" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="_LV9zHHMWyS-oksBHVtJ-19" value="duty cycle" style="text;whiteSpace=wrap;" vertex="1" parent="1">
+          <mxGeometry x="450" y="85" width="60" height="40" as="geometry" />
         </mxCell>
       </root>
     </mxGraphModel>
