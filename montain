@@ -1,0 +1,27 @@
+#include <stdio.h>
+
+int main() {
+    int mountains[8]; // Array to store the heights of the mountains
+
+    // Game loop
+    while (1) {
+        int highest_mountain_height = 0;
+        int target_mountain_index = 0;
+
+        // Input the heights of the mountains
+        for (int i = 0; i < 8; i++) {
+            scanf("%d", &mountains[i]);
+
+            // Find the highest mountain
+            if (mountains[i] > highest_mountain_height) {
+                highest_mountain_height = mountains[i];
+                target_mountain_index = i;
+            }
+        }
+
+        // Shoot the highest mountain
+        printf("%d\n", target_mountain_index);
+    }
+
+    return 0;
+}
