@@ -1,0 +1,127 @@
+#include <OneWire.h>
+#include <DallasTemperature.h>
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+
+#define ONE_WIRE_BUS 2
+OneWire oneWire(ONE_WIRE_BUS);
+DallasTemperature sensors(&oneWire);
+
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+int pel = 6;
+int fan1 = 9;
+int fan2 =10;
+int fan3 =11;
+double temp;
+unsigned long previousMillisPID = 0; 
+unsigned long previousMillisREAD = 0; 
+unsigned long currentMillis;
+
+/*working variables*/
+unsigned long lastTime=0;
+double Input,Output1,lastErr,PID;
+double errSum=0,Output=0;
+double Setpoint = 18.00;
+double kp = 50;
+double ki = 2;
+double kd = 1;
+// double kp = 4.60761821318785;
+// double ki = 0.0141522269264744;
+// double kd = 97.1628120357231;
+
+void Compute(){
+   /*How long since we last calculated*/
+   unsigned long now = millis();
+   //unsigned long now = currentMillis;
+   double timeChange = (double)(now - lastTime)/1000;
+  
+   /*Compute all the working error variables*/
+   double error = Setpoint - Input;
+   error = error*-1;
+   errSum += (error * timeChange);
+   double dErr = (error - lastErr) / timeChange;
+   
+   
+   /*Compute PID Output*/
+   PID = (kp * error) + (ki * errSum) + (kd * dErr);
+  //  if(Output>255){
+  //   Output=255;
+  //  }else if(Output<0){
+  //   Output =0;
+  //  }else{
+  //   Output =Output;
+  //  }
+  Output = PID;
+  if(Output<155&&temp>Setpoint){
+    Output=155;
+   }else if(Output>155&&temp<Setpoint){
+    Output=0;
+   }else{
+    Output=Output;
+   }
+  Output1 = constrain(Output,0 , 255); //constraining to appropriate value
+   Serial.print(error);
+   Serial.print(",");
+   Serial.print(errSum);
+   Serial.print(",");
+   Serial.print(dErr);
+   Serial.print(",");
+   Serial.print(kp*error);
+   Serial.print(",");
+   Serial.print(ki*errSum);
+   Serial.print(",");
+   Serial.print(kd*dErr);
+   Serial.print(",");
+   Serial.print(PID);
+   Serial.print(",");
+   Serial.print(Output1);
+   Serial.print(",");
+   Serial.print(timeChange);
+   Serial.print(",");
+   /*Remember some variables for next time*/
+   lastErr = error;
+   lastTime = now;
+}
+  
+void setup() {
+    pinMode(2, INPUT);
+    pinMode(6, OUTPUT);
+    pinMode(9, OUTPUT);
+    pinMode(10, OUTPUT);
+    pinMode(11, OUTPUT);
+    Serial.begin(9600);
+    sensors.begin();
+    lcd.begin();
+    lcd.backlight();
+    analogWrite(fan1, 255);
+    analogWrite(fan2, 255);
+    analogWrite(fan3, 255);
+}
+
+void loop(){
+  unsigned long currentMillis = millis();
+  sensors.requestTemperatures(); 
+  temp = sensors.getTempCByIndex(0);
+  if (currentMillis - previousMillisPID >= 10) {
+    previousMillisPID = currentMillis;
+    Input = temp;
+    Compute();
+    Serial.println(temp);
+    analogWrite(pel, Output1);
+    // if(Input<=Setpoint){
+    //   analogWrite(fan1, 0);
+    // }else{
+    //   analogWrite(fan1, 255);
+    // }
+    // lcd.setCursor(0, 0);
+    // lcd.print("Temp: ");
+    // lcd.print(temp);
+    // lcd.print("C");
+  }
+
+  if (currentMillis - previousMillisREAD >= 10000) {
+    previousMillisREAD = currentMillis;
+    // Serial.println(temp);
+  }
+
+}
