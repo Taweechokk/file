@@ -1,0 +1,340 @@
+// include library
+#include <Arduino.h>
+#include <string>
+#include <ESP32Servo.h>
+#include <OneWire.h>
+#include <DallasTemperature.h>
+#include <Wire.h> 
+#include "DHT.h"
+#include <LiquidCrystal_I2C.h>
+#include <Adafruit_Sensor.h>
+#include <Adafruit_BME280.h>
+
+//define variable function    18 19 23
+#define KDBUTTON_READ     "a"                 //pass
+#define KDTEMP            "b"                 //pass
+#define KDOUT             "c"     
+#define KDLDR             "d"    
+
+#define DIGITAL_READ      "m"                 //pass
+#define DIGITAL_WRITE     "o"                 //pass
+#define READ_DHT          "i"                 //pass
+#define READ_DS18B20      "j"                 //pass
+#define READ_ULTRASONIC   "k"                 //pass
+#define READ_BME280       "q"                 //pass
+#define WRITE_LCD16x2     "g"                 //pass
+#define GET_I2C_ADDRESS   "get_i2c_address"   //pass
+
+//define buffer size 
+#define COMMAND_BUFFER_SIZE 100
+
+#define SEALEVELPRESSURE_HPA (1013.25)
+
+// Global variable to use library functions
+#define DHTTYPE DHT11
+Adafruit_BME280   bme; 
+
+
+void setup() {
+  Serial.begin(115200);
+}
+
+void loop() {
+  static char commandBuffer[COMMAND_BUFFER_SIZE];
+  static uint8_t index = 0;
+
+
+  while (Serial.available() > 0) {
+    char receivedChar = Serial.read();
+
+    if (receivedChar == '\n') {
+      // End of command, process it
+      commandBuffer[index] = '\0';  // Null-terminate the string
+      processCommand(String(commandBuffer));
+      // Reset the buffer for the next command
+      index = 0;
+    } else {
+      // Add character to the buffer
+      if (index < COMMAND_BUFFER_SIZE - 1) {
+        commandBuffer[index++] = receivedChar;
+      } else {
+        // Buffer overflow, reset index
+        index = 0;
+      }
+    }
+  }
+}
+
+
+void processCommand(String command) {
+
+    // Get position of colons
+    String* arguments = splitString(command);
+    String commandName = String(arguments[0]);
+    String commandId = String(arguments[1]);
+
+    // Execute command based on commandName
+    if (commandName == DIGITAL_READ) {
+        // Execute command: DIGITAL_READ
+        // ...
+        int pinNumber = extractPinNumber(arguments[2]);
+        pinMode(pinNumber, INPUT);
+        int digitalValue = digitalRead(pinNumber);
+        Serial.println(commandName + ":" + commandId + ":" + digitalValue);
+
+    } else if (commandName == DIGITAL_WRITE) {
+        // Execute command: DIGITAL_WRITE
+        // ...
+        int pinNumber = extractPinNumber(arguments[2]);
+        int pinValue = arguments[3].toInt();
+        pinMode(pinNumber, OUTPUT);
+        digitalWrite(pinNumber, pinValue);
+        Serial.println(commandName + ":" + commandId + ":" + pinValue);
+
+    } else if (commandName == READ_ULTRASONIC) {
+      // Execute command: READ_ULTRASONIC
+      // ...
+      int trigPin = extractPinNumber(arguments[2]);
+      int echoPin = extractPinNumber(arguments[3]);
+      float sonar =  readSonar(trigPin, echoPin);
+      Serial.println(commandName + ":" + commandId + ":" + sonar);
+
+    } else if (commandName == READ_DS18B20) {
+      // Execute command: READ_DS18B20
+      // ...
+      int pin = extractPinNumber(arguments[2]);
+      String ds18b20 = readDS18B20(pin);
+      Serial.println(commandName + ":" + commandId + ":" + ds18b20);
+
+    } else if (commandName == READ_DHT) {
+      // Execute command: READ_DHT
+      // ...
+      int pin = extractPinNumber(arguments[2]);
+      int mode = arguments[3].toInt();
+      String dht = readDHT(pin, mode);
+      Serial.println(commandName + ":" + commandId + ":" + dht);
+
+    } else if (commandName == GET_I2C_ADDRESS) {
+      // Execute command: GET_I2C_ADDRESS
+      // ...
+      String addressString = scanI2C();
+      Serial.println(commandName + ":" + commandId + ":" + addressString);
+
+    } else if (commandName == WRITE_LCD16x2) {
+      // Execute command: WRITE_LCD16x2
+      // ...
+      int address1 = (int)strtol(arguments[2].c_str(), NULL, 16);
+      String message1 = arguments[3];
+      String message2 = arguments[4];
+      writeLiquidCrystal(address1, message1, message2);
+      Serial.println(commandName + ":" + commandId + ":" + message1 + ":" + message2);
+
+    } else if (commandName == READ_BME280) {
+      // Execute command: READ_BME280
+      // ...
+      int address = (int)strtol(arguments[2].c_str(), NULL, 16);
+      int mode = arguments[3].toInt();
+      float seaLevelPressure = arguments[4].toFloat();
+      String BME = readBME280(address, mode, seaLevelPressure);
+      Serial.println(commandName + ":" + commandId + ":" + BME);
+
+    } else if (commandName == KDBUTTON_READ) {
+      // Execute command: BUTTON_BUILT-IN_READ
+      // ...
+      int pinNumber = extractPinNumber(arguments[2]);
+      pinMode(pinNumber, INPUT_PULLUP);
+      int digitalValue = digitalRead(pinNumber);
+      Serial.println(commandName + ":" + commandId + ":" + digitalValue);
+
+    } else if (commandName == KDTEMP) {
+      // Execute command: BUTTON_BUILT-IN_READ
+      // ...
+      float temp = KDREADTEMP();
+      Serial.println(commandName + ":" + commandId + ":" + temp);
+
+    } else if (commandName == KDOUT) {
+      // Execute command: PINOUTPUT
+      // ...
+      int pinNumber = extractPinNumber(arguments[2]);
+      int pinValue = arguments[3].toInt();
+      pinMode(pinNumber, OUTPUT);
+      digitalWrite(pinNumber, pinValue);
+      Serial.println(commandName + ":" + commandId + ":" + pinValue);
+
+    } else if (commandName == KDLDR) {
+      // Execute command: LDR build-in 
+      // ...
+      int LDR_value = readLight();
+      Serial.println(commandName + ":" + commandId + ":" + LDR_value);
+      
+    } else {
+        // Unknown command
+        // ...
+        String feedback = commandName + ":" + commandId + ":0:Unknown command\n";
+        Serial.println(feedback);
+
+    }
+
+    // Free the memory allocated for the splitString function
+    delete[] arguments;  
+}
+
+String* splitString(String input) {
+  int numStrings = 1;
+  for (int i = 0; i < input.length(); i++) {
+    if (input.charAt(i) == ':') {
+      numStrings++;
+    }
+  }
+  String* dataArray = new String[numStrings];
+  
+  int index = 0;
+  int lastIndex = 0;
+  int arrayIndex = 0;
+  
+  while (index < input.length()) {
+    index = input.indexOf(':', lastIndex);
+    if (index == -1) {
+      dataArray[arrayIndex] = input.substring(lastIndex); // Storing the last substring
+    } else {
+      dataArray[arrayIndex] = input.substring(lastIndex, index); // Storing the substring
+      lastIndex = index + 1;
+    }
+    arrayIndex++;
+  }
+  
+  return dataArray;
+}
+
+int extractPinNumber(String input) {
+  String resultStr = "";
+  // Iterate through each character in the input string
+  for (int i = 0; i < input.length(); i++) {
+    if (isDigit(input.charAt(i))) {
+      resultStr += input.charAt(i);
+    }
+  }
+  return resultStr.toInt();
+}
+
+float readSonar(int trigPin, int echoPin) {  //HC-SR04 Ultrasonic sensor
+  float duration, distance;
+  pinMode(trigPin, OUTPUT);
+  pinMode(echoPin, INPUT);
+  digitalWrite(trigPin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(trigPin, HIGH);  // Sets the trigPin on HIGH state for 10 micro seconds
+  delayMicroseconds(10);
+  digitalWrite(trigPin, LOW);
+  duration = pulseIn(echoPin, HIGH);  // Reads the echoPin, returns the sound wave travel time in microseconds
+  distance = duration * 0.0343 / 2;   // Calculating the distance
+  return distance;
+}
+
+String readDS18B20(int ONE_WIRE_BUS) {
+  OneWire oneWire(ONE_WIRE_BUS);
+  DallasTemperature sensors(&oneWire);
+  sensors.requestTemperatures();
+  return String(sensors.getTempCByIndex(0));
+}
+
+String readDHT(int pin, int mode) {
+  int DHTPIN = pin;
+  DHT dht(DHTPIN, DHTTYPE);
+  dht.begin();
+  if (mode == 1) {
+    return String(dht.readTemperature());
+  } else if (mode == 2) {
+    return String(dht.readHumidity());
+  } else {
+    return "Invalid mode";
+  }
+}
+
+String scanI2C() {
+  String addressesString = "";
+  Wire.begin();
+  byte error, address;
+  int nDevices = 0;
+
+  for (address = 1; address < 127; address++) {
+    Wire.beginTransmission(address);
+    error = Wire.endTransmission();
+
+    if (error == 0) {
+      if (nDevices > 0)
+        addressesString += ":";
+      addressesString += "0x";
+      if (address < 16)
+        addressesString += "0";
+      addressesString += String(address, HEX);
+      nDevices++;
+    } else if (error == 4) {
+      addressesString += ":Unknown error at address 0x";
+      if (address < 16)
+        addressesString += "0";
+      addressesString += String(address, HEX);
+    }
+  }
+
+  if (nDevices == 0)
+    addressesString = "No I2C devices found";
+
+  return addressesString;
+}
+
+void writeLiquidCrystal(int address, String message1, String message2) {
+  LiquidCrystal_I2C lcd(address, 16, 2);
+  lcd.begin();
+  lcd.backlight();
+  lcd.setCursor(0, 0);
+  lcd.print(message1);
+  lcd.setCursor(0, 1);
+  lcd.print(message2);
+}
+
+String readBME280(int address, int mode, float seaLevelPressure) {
+  unsigned status = bme.begin(address);
+  switch (mode) {
+    case 1:
+      return String(bme.readTemperature()); // Temperature in Celsius
+    case 2:
+      return String(bme.readPressure() / 100.0F); // Pressure in hPa
+    case 3:
+      return String(bme.readAltitude(seaLevelPressure)); // Approx. Altitude in meters
+    case 4:
+      return String(bme.readHumidity()); // Humidity percentage
+    default:
+      return "Invalid mode";
+  }
+}
+
+
+float KDREADTEMP() {
+  int LM73_ADDR = 0x4D;
+  Wire1.begin(4, 5);
+  Wire1.beginTransmission(LM73_ADDR);
+  Wire1.write(0x00); // Temperature Data Register
+  Wire1.endTransmission();
+  
+  uint8_t count = Wire1.requestFrom(LM73_ADDR, 2);
+  float temp = 0.0;
+  if (count == 2) {
+    byte buff[2];
+    buff[0] = Wire1.read();
+    buff[1] = Wire1.read();
+    temp += (int)(buff[0]<<1);
+    if (buff[1]&0b10000000) temp += 1.0; 
+    if (buff[1]&0b01000000) temp += 0.5;
+    if (buff[1]&0b00100000) temp += 0.25;
+    if (buff[0]&0b10000000) temp *= -1.0;
+  }
+  return temp;
+}
+
+int readLight() {
+  int LDR_PIN = 36;
+  pinMode(LDR_PIN, INPUT);
+  int value = analogRead(LDR_PIN);
+  return value;
+}
