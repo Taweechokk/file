@@ -1,0 +1,571 @@
+// include library
+#include <WiFi.h>
+#include <ArduinoJson.h>
+#include <PubSubClient.h>
+#include <Arduino.h>
+#include <string>
+#include <OneWire.h>
+#include <DallasTemperature.h>
+#include <Wire.h> 
+#include <ESP32Servo.h>
+#include "DHT.h"
+#include <LiquidCrystal_I2C.h>
+#include <Adafruit_Sensor.h>
+#include <Adafruit_BME280.h>
+#include <Adafruit_GFX.h>
+#include "Adafruit_LEDBackpack.h"
+#include <Adafruit_MPU6050.h>
+#include <Adafruit_NeoPixel.h>
+#include <map>
+
+// WiFi Configuration
+#define WIFI_AP "soloist"
+#define WIFI_PASSWORD "060825455"
+// #define WIFI_AP "kamon_vee_2.4G"
+// #define WIFI_PASSWORD "kamonvee2516"
+
+// MQTT Configuration
+#define THINGSBOARD_SERVER "gateway.aithaigen.in.th"
+#define THINGSBOARD_PORT 1883
+#define TOKEN "H68JV4okbv"
+
+// MQTT Topic
+#define KEY_INPUT   "WEB_REQUEST"
+#define KEY_OUTPUT  "MCU_RESPONSE"
+
+//define variable function
+//GPIO
+#define DIGITAL_READ      "dr"       //digital read
+#define ANALOG_READ       "ar"       //analog read
+#define DIGITAL_WRITE     "dw"       //digital write
+#define ANALOG_WRITE      "aw"       //analog write
+#define SET_INTERRUPT     "itr"      // Interrupt
+//Built-in
+#define KB_BUTTON         "k_bn"     // Button
+#define KB_TEMP           "k_tm"     // Temperature
+// #define KB_BUZZER         "k_bz"     // Buzzer
+#define KB_MATRIX_Text    "k_mx"     // LED Dot Matrix Text
+#define KB_MATRIX_Pattern "k_ml"     // LED Dot Matrix Pattern
+#define KB_LED            "k_ld"     // LED
+#define KB_GYRO           "k_gy"     // MPU6050
+//Sensor
+#define READ_BME280       "b280"    // BME280 I2C
+#define READ_DHT          "d11"     // DHT11
+#define READ_DS18B20      "ds18"    // DS18B20
+#define READ_TMP36        "t36"     // TMP36
+#define READ_ULTRASONIC   "ult"     // Ultrasonic (HC-SR04)
+#define READ_MICROPHONE   "mic"     // Microphone (FC-04)
+//Actuator
+#define PLAY_BUZZER       "buz"     // Buzzer (FC-07)
+#define MOVE_SERVO        "srv"     // Servo Motor
+#define WRITE_LCD16x2     "lcd"     // LCD 16x2 I2C
+#define WRITE_RGB_LED     "rgb"     // RGB LED
+//Function
+#define GET_I2C_ADDRESS   "get_i2c_address"
+/////////////////////////////////////////////////////////////////////////
+#define SEALEVELPRESSURE_HPA (1013.25)
+
+// Define maximum PWM Channels for ESP32
+#define MAX_PWM_CHANNELS 16
+// Array to track used channels
+bool pwmChannelUsed[MAX_PWM_CHANNELS] = {false};
+// Map to track PWM channels for each Buzzer Pin
+std::map<int, int> buzzerPWMChannels;
+
+// Global variable to use library functions
+#define DHTTYPE DHT11
+Adafruit_BME280         bme; 
+Adafruit_8x16minimatrix matrix;
+Servo                   servo_motor;  
+Adafruit_MPU6050        mpu;
+
+// Define the pin for the WS2812B LED strip
+int PIN_WS2812B  = 23;
+int NUM_PIXELS  = 6;
+Adafruit_NeoPixel ws2812b(NUM_PIXELS, PIN_WS2812B, NEO_GRB + NEO_KHZ800);
+
+// Define the struct to hold sensor data readMPU6050
+struct SensorData {
+    float Acceleration_X;
+    float Acceleration_Y;
+    float Acceleration_Z;
+    float Rotation_X;
+    float Rotation_Y;
+    float Rotation_Z;
+    float Temperature;
+};
+
+// Variables for timing
+unsigned long previousMillis = 0;
+const long interval = 100;  // Interval in milliseconds
+int8_t x = 16;  // Initial position of the text
+String text_global = "";
+int state_global = 0;
+
+////////////////////////////////////////////////////////////////
+
+// MQTT Client
+WiFiClient wifiClient;
+PubSubClient client(wifiClient);
+
+void setup() {
+  Serial.begin(115200);
+  delay(10);    // Delay to let system boot up
+  InitWiFi();   
+  client.setServer( THINGSBOARD_SERVER, THINGSBOARD_PORT);
+  client.setCallback(on_message);
+
+  matrix.begin(0x70);
+  matrix.setRotation(1);
+  matrix.setTextSize(1);
+  matrix.setTextColor(LED_ON);
+  matrix.setTextWrap(false);
+  matrix.clear();
+  matrix.writeDisplay();
+
+  ws2812b.clear();
+  ws2812b.show();
+}
+
+void loop() {
+  if (!client.connected()){
+    reconnect();
+  }
+  
+  client.loop();
+
+  unsigned long currentMillis = millis();
+  int length = text_global.length();
+  
+  if(state_global==1){
+    // Check if it's time to update the display
+    if (currentMillis - previousMillis >= interval) {
+      previousMillis = currentMillis;
+
+      matrix.clear();
+      matrix.setCursor(x, 0);
+      matrix.print(text_global);
+      matrix.writeDisplay();
+      x--;  // Move the text to the left
+
+      // Check if the text has moved off the screen
+      if (x < -(length * 5 + (length - 1))) {
+        x = 16;  // Reset to the starting position
+      }
+    }
+  }
+
+}
+
+// WiFi initialization
+void InitWiFi() {
+  Serial.println("Connecting to WiFi...");
+
+  WiFi.begin(WIFI_AP, WIFI_PASSWORD);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\nWiFi connected");
+}
+
+// MQTT reconnection
+void reconnect() {
+  // Loop until we're reconnected
+  while (!client.connected()) {
+
+    if ( WiFi.status() != WL_CONNECTED) {
+      InitWiFi();
+    }
+
+    Serial.print("Connecting to ThingsBoard node ...");
+    if ( client.connect("ESP32 Device", TOKEN, NULL) ) {
+      Serial.println( "[DONE]" );
+      // Subscribing to shared device attribute changes,
+      client.subscribe("v1/devices/me/attributes");
+    } else {
+      Serial.print( "[FAILED] [ rc = " );
+      Serial.print( client.state() );
+      Serial.println( " : retrying in 1 seconds]" );
+      delay( 1000 );
+    }
+  }
+}
+
+// The callback for when a PUBLISH message is received from the server.
+void on_message(const char* topic, byte* payload, unsigned int length) {
+
+  // extract the message
+  char json[length + 1];
+  for (int i = 0; i < length; i++) {
+    json[i] = (char)payload[i];
+  }
+  json[length] = '\0';
+
+  // parse the message
+  DynamicJsonDocument doc(1024);
+  DeserializationError error = deserializeJson(doc, json);
+  if (error) {
+    Serial.print(F("deserializeJson() failed: "));
+    Serial.println(error.c_str());
+    return;
+  }
+
+  // extract the command and remove the quotes
+  String command = doc[KEY_INPUT];
+  // if command is null, return
+  if (command == "null" || command == "") {
+    return;
+  }
+
+  // Process the command
+  Serial.println("Received command: " + command);
+  String commandchange = removeQuotes(command);
+  Serial.println(commandchange);
+  processCommandIot(commandchange);
+}
+
+
+void processCommandIot(String command) {
+
+  // Get position of colons
+  String* arguments = splitString(command);
+  String commandName = String(arguments[0]);
+  String commandId = String(arguments[1]);
+
+  // Execute command based on commandName
+  if (commandName == DIGITAL_READ) {
+    // Execute command: DIGITAL_READ
+    // ...
+    int pinNumber = extractPinNumber(arguments[2]);
+    pinMode(pinNumber, INPUT);
+    // pinMode(pinNumber, INPUT_PULLUP);
+    int digitalValue = digitalRead(pinNumber);
+    sendFeedback(commandName + ":" + commandId + ":" + digitalValue);
+
+  } else if (commandName == ANALOG_READ) {
+    // Execute command: ANALOG_READ
+    // ...
+    int pinNumber = extractPinNumber(arguments[2]);
+    pinMode(pinNumber, INPUT);
+    int analogValue = analogRead(pinNumber);
+    Serial.println(commandName + ":" + commandId + ":" + analogValue);
+    sendFeedback(commandName + ":" + commandId + ":" + analogValue);
+
+  } else if (commandName == DIGITAL_WRITE) {
+    // Execute command: DIGITAL_WRITE
+    // ...
+    int pinNumber = extractPinNumber(arguments[2]);
+    int pinValue = arguments[3].toInt();
+    pinMode(pinNumber, OUTPUT);
+    digitalWrite(pinNumber, pinValue);
+    sendFeedback(commandName + ":" + commandId + ":1");
+
+  } else if (commandName == ANALOG_WRITE) {
+    // Execute command: ANALOG_WRITE
+    int pinNumber = extractPinNumber(arguments[2]);
+    int pinValue = arguments[3].toInt();
+    static int pwmChannel = -1; // Reserve a channel for analog write
+    setupPWMChannel(pinNumber, 5000, 8, pinValue, pwmChannel);
+    sendFeedback(commandName + ":" + commandId + ":" + pinValue);
+
+  } else if (commandName == KB_BUTTON) {
+    // Execute command: KB_BUTTON build-in
+    // ...
+    int pinNumber = extractPinNumber(arguments[2]);
+    pinMode(pinNumber, INPUT_PULLUP);
+    int digitalValue = digitalRead(pinNumber);
+    sendFeedback(commandName + ":" + commandId + ":" + digitalValue);
+
+  } else if (commandName == PLAY_BUZZER) {
+      // Execute command: BUZZER build-in 
+      // ...
+      int BUZZER_PIN = extractPinNumber(arguments[2]);
+      int toneFreq = arguments[3].toInt();
+      pinMode(BUZZER_PIN, OUTPUT);
+      KDbuzzer(BUZZER_PIN, toneFreq);
+      sendFeedback(commandName + ":" + commandId + ":" + toneFreq);
+      Serial.println(commandName + ":" + commandId + ":"+ "toneFreq");
+      
+  } else if (commandName == KB_TEMP) {
+      // Execute command: KB_TEMP build-in
+      // ...
+      float temp = KBREADTEMP();
+      Serial.println(commandName + ":" + commandId + ":" + String(temp, 2));
+      sendFeedback(commandName + ":" + commandId + ":" + String(temp, 2));
+
+  } else if (commandName == KB_MATRIX_Text) {
+      // Execute command: KDdotmartix
+      // ...
+      String text_display = arguments[2];
+      KB_TEXT(text_display);
+      Serial.println(commandName + ":" + commandId + ":" + text_display);
+      sendFeedback(commandName + ":" + commandId + ":" + text_display);
+
+  } else if (commandName == KB_MATRIX_Pattern) {
+      // Execute command: KDdotmartix
+      // ...
+      String row0 = arguments[2];
+      String row1 = arguments[3];
+      String row2 = arguments[4];
+      String row3 = arguments[5];
+      String row4 = arguments[6];
+      String row5 = arguments[7];
+      String row6 = arguments[8];
+      String row7 = arguments[9];
+
+      KB_PATTERN(row0, row1, row2, row3, row4, row5, row6, row7);
+
+      Serial.println(commandName + ":" + commandId + ":" + "parttern");
+      sendFeedback(commandName + ":" + commandId + ":" + "parttern");
+
+  } else if (commandName == KB_LED) {
+      // Execute command: KB_LED build-in 
+      // ...
+      String pixel      = arguments[2];
+      int green_pixel   = arguments[3].toInt();
+      int red_pixel     = arguments[4].toInt();
+      int blue_pixel    = arguments[5].toInt();
+      KBLED_strip(pixel,green_pixel,red_pixel,blue_pixel);
+      Serial.println(commandName + ":" + commandId + ":" + pixel);
+
+  } else {
+    // Unknown command
+    // ...
+    String feedback = commandName + ":" + commandId + ":Unknown command\n";
+    sendFeedback(feedback);
+  }
+
+  // Free the memory allocated for the splitString function
+  delete[] arguments;
+}
+
+void sendFeedback(String feedback) {
+  if (client.connected()) {
+    const char* topic = "v1/devices/me/attributes";
+    String payload = "{\"" + String(KEY_OUTPUT) + "\":\"" + feedback + "\"}";
+    client.publish(topic, payload.c_str());
+  }
+}
+
+String* splitString(String input) {
+  int numStrings = 1;
+  for (int i = 0; i < input.length(); i++) {
+    if (input.charAt(i) == ':') {
+      numStrings++;
+    }
+  }
+  String* dataArray = new String[numStrings];
+  
+  int index = 0;
+  int lastIndex = 0;
+  int arrayIndex = 0;
+  Serial.print("length text:");
+  Serial.println(input.length());
+
+  while (index < input.length()) {
+    index = input.indexOf(':', lastIndex);
+    if (index == -1) {
+      dataArray[arrayIndex] = input.substring(lastIndex); // Storing the last substring
+    } else {
+      dataArray[arrayIndex] = input.substring(lastIndex, index); // Storing the substring
+      lastIndex = index + 1;
+    }
+    arrayIndex++;
+  }
+  
+  return dataArray;
+}
+
+int extractPinNumber(String input) {
+  return input.toInt();
+}
+
+String removeQuotes(String input) {
+  String result = "";
+  for (int i = 0; i < input.length(); i++) {
+    char c = input.charAt(i);
+    if (c != '"') {  // If the character is not a quotation mark
+      result += c;   // Add it to the result
+    }
+  }
+  return result;
+}
+
+void KDbuzzer(int BUZZER_PIN, int freq) {
+    int pwmChannel;
+
+    // Check if the pin already has a channel
+    if (buzzerPWMChannels.find(BUZZER_PIN) == buzzerPWMChannels.end()) {
+        pwmChannel = allocatePWMChannel(); // Allocate a new channel
+        if (pwmChannel == -1) {
+            Serial.println("No available PWM channels!");
+            return;
+        }
+        buzzerPWMChannels[BUZZER_PIN] = pwmChannel; // Map the pin to the channel
+    } else {
+        pwmChannel = buzzerPWMChannels[BUZZER_PIN]; // Use existing channel
+    }
+
+    if (freq > 0) {
+        setupPWMChannel(BUZZER_PIN, freq, 8, 128, pwmChannel); // Start buzzer
+    } else {
+        ledcWrite(pwmChannel, 0);             // Stop buzzer
+        freePWMChannel(pwmChannel);           // Free the channel
+        buzzerPWMChannels.erase(BUZZER_PIN);  // Remove mapping
+    }
+}
+
+// Function to allocate an available PWM channel
+int allocatePWMChannel() {
+    for (int i = 0; i < MAX_PWM_CHANNELS; i++) {
+        if (!pwmChannelUsed[i]) {
+            pwmChannelUsed[i] = true; // Mark channel as used
+            return i;
+        }
+    }
+    return -1; // No available channel
+}
+
+// Function to free a PWM channel
+void freePWMChannel(int channel) {
+    if (channel >= 0 && channel < MAX_PWM_CHANNELS) {
+        pwmChannelUsed[channel] = false; // Mark channel as available
+    }
+}
+
+// Function to configure and write to a PWM channel
+void setupPWMChannel(int pin, int frequency, int resolution, int value, int& pwmChannel) {
+    if (pwmChannel == -1) {
+        pwmChannel = allocatePWMChannel();
+        if (pwmChannel == -1) {
+            Serial.println("No available PWM channels!");
+            return;
+        }
+    }
+    ledcSetup(pwmChannel, frequency, resolution);
+    ledcAttachPin(pin, pwmChannel);
+    ledcWrite(pwmChannel, value);
+}
+
+float KBREADTEMP() {
+  int LM73_ADDR = 0x4D;
+  Wire1.begin(4, 5);
+  Wire1.beginTransmission(LM73_ADDR);
+  Wire1.write(0x00); // Temperature Data Register
+  Wire1.endTransmission();
+  
+  uint8_t count = Wire1.requestFrom(LM73_ADDR, 2);
+  float temp = 0.0;
+  if (count == 2) {
+    byte buff[2];
+    buff[0] = Wire1.read();
+    buff[1] = Wire1.read();
+    temp += (int)(buff[0]<<1);
+    if (buff[1]&0b10000000) temp += 1.0; 
+    if (buff[1]&0b01000000) temp += 0.5;
+    if (buff[1]&0b00100000) temp += 0.25;
+    if (buff[0]&0b10000000) temp *= -1.0;
+  }
+  return temp;
+}
+
+void KB_TEXT(String text) {
+  //setup
+  matrix.clear();
+  
+  int lenght = text.length();
+  Serial.println(lenght);
+  if (lenght ==0){
+    state_global = 0 ;
+    matrix.clear();
+  } else if (lenght <=2 && lenght >0){
+    state_global = 0 ;
+    // คำนวณความกว้างของข้อความ
+    int textWidth = text.length() * 6; // 6 พิกเซลต่ออักขระ
+    int textHeight = 8;              // ความสูงของข้อความ
+    // คำนวณตำแหน่งตรงกลาง
+    int centerX = (matrix.width() - textWidth) / 2;
+    int centerY = (matrix.height() - textHeight) / 2;
+    // ตั้ง cursor และแสดงข้อความ
+    matrix.setCursor(centerX, centerY);
+    matrix.print(text);
+    matrix.writeDisplay();
+  } else {
+    state_global = 1;
+    text_global = text ;
+  }
+}
+
+// void KB_PATTERN(String row0, String row1, String row2, String row3, String row4, String row5, String row6, String row7) {
+
+//   matrix.clear();
+//   matrix.writeDisplay();
+  
+//   // แสดงข้อความในแต่ละแถว
+//   setRowWithHex(0, (uint16_t)strtoul(row0.c_str(), NULL, 16));
+//   setRowWithHex(1, (uint16_t)strtoul(row1.c_str(), NULL, 16));
+//   setRowWithHex(2, (uint16_t)strtoul(row2.c_str(), NULL, 16));
+//   setRowWithHex(3, (uint16_t)strtoul(row3.c_str(), NULL, 16));
+//   setRowWithHex(4, (uint16_t)strtoul(row4.c_str(), NULL, 16));
+//   setRowWithHex(5, (uint16_t)strtoul(row5.c_str(), NULL, 16));
+//   setRowWithHex(6, (uint16_t)strtoul(row6.c_str(), NULL, 16));
+//   setRowWithHex(7, (uint16_t)strtoul(row7.c_str(), NULL, 16));
+
+// }
+  
+
+// // ฟังก์ชันเปิด LED ด้วยเลขฐาน 16
+// void setRowWithHex(uint8_t row, uint16_t hexValue) {
+//   // ตรวจสอบว่าค่า row อยู่ในขอบเขตที่เหมาะสม
+//   if (row >= 8) {
+//     Serial.println("Invalid row value!");
+//     return;
+//   }
+//   // วาด LED ในแถวที่กำหนด
+//   for (uint8_t col = 0; col < 16; col++) {
+//     // ตรวจสอบว่าแต่ละบิตของ hexValue เป็น 1 หรือไม่
+//     if (hexValue & (1 << col)) {
+//       matrix.drawPixel(col, row, LED_ON); // เปิด LED
+//     } else {
+//       matrix.drawPixel(col, row, LED_OFF); // ปิด LED
+//     }
+//   }
+//   // เขียนข้อมูลไปยัง LED matrix
+//   matrix.writeDisplay();
+// }
+
+void KB_PATTERN(String row0, String row1, String row2, String row3, String row4, String row5, String row6, String row7) {
+  matrix.clear();
+  matrix.writeDisplay();
+  
+  // สร้างอาร์เรย์ของข้อความ
+  String rows[] = {row0, row1, row2, row3, row4, row5, row6, row7};
+
+  // แสดงข้อความในแต่ละแถว
+  for (uint8_t row = 0; row < 8; row++) {
+    uint16_t hexValue = (uint16_t)strtoul(rows[row].c_str(), NULL, 16);
+
+    for (uint8_t col = 0; col < 16; col++) {
+      // ตรวจสอบว่าแต่ละบิตของ hexValue เป็น 1 หรือไม่
+      if (hexValue & (1 << col)) {
+        matrix.drawPixel(col, row, LED_ON); // เปิด LED
+      } else {
+        matrix.drawPixel(col, row, LED_OFF); // ปิด LED
+      }
+    }
+  }
+  // เขียนข้อมูลไปยัง LED matrix
+  matrix.writeDisplay();
+}
+
+void KBLED_strip(String pixel,int green,int red,int blue){
+  if(pixel=="end"){
+    ws2812b.clear();
+  } else{
+    int numpixel = pixel.toInt();
+    ws2812b.setPixelColor(numpixel, ws2812b.Color(green,red,blue));
+  }
+  ws2812b.show();
+}
+
