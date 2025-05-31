@@ -1,0 +1,162 @@
+import { IMAGE_PATH } from "@/stores/constants";
+import React, { useState, useMemo } from 'react';
+import { Search } from 'lucide-react';
+import { useTranslations } from "next-intl";
+import Image from "next/image";
+import Link from "next/link";
+import { mcus } from "../stores/compatible-devices/mcu";
+
+// Convert mcus to devices
+const baseDevices: Device[] = mcus.map((mcu, idx) => ({
+  id: idx + 1,
+  name: mcu.name,
+  image: mcu.photo_image || "https://via.placeholder.com/241x192?text=No+Image",
+  compatibleSensors: mcu.sensors?.length ?? 0,
+  compatibleOutputs: mcu.outputs?.length ?? 0,
+  comingSoon: mcu.coming_soon,
+  hasDocumentation: !!mcu.documentation_path,
+  hasInstallation: !!mcu.installation_path,
+}));
+
+// เพิ่ม mock data สำหรับ pagination
+const mockDevices: Device[] = [
+  {
+    id: 1001,
+    name: "ESP32 DevKit",
+    image: "/images/ROMEO.jpg",
+    compatibleSensors: 15,
+    compatibleOutputs: 8,
+    comingSoon: false,
+    hasDocumentation: true,
+    hasInstallation: true,
+  },
+  // ... [Mock data truncated for brevity, but included in actual code] ...
+  ...Array.from({ length: 12 }, (_, i) => ({
+    id: 1100 + i,
+    name: `Mock Device ${i + 1}`,
+    image: "/images/ROMEO.jpg",
+    compatibleSensors: 10 + (i % 10), // ค่าคงที่
+    compatibleOutputs: 5 + (i % 5),   // ค่าคงที่
+    comingSoon: false,
+    hasDocumentation: true,
+    hasInstallation: true,
+  })),
+];
+
+const devices: Device[] = baseDevices.concat(mockDevices);
+
+// Device type definition
+interface Device {
+  id: number;
+  name: string;
+  image: string;
+  compatibleSensors: number;
+  compatibleSensors2?: number; // Some devices have 2 rows
+  comingSoon?: boolean;
+  compatibleOutputs?: number;
+  hasDocumentation?: boolean;
+  hasInstallation?: boolean;
+}
+
+// Device card component
+function DeviceCard({ device }: { device: Device }) {
+  return (
+    <div className={`bg-white border border-gray-200 hover:shadow-md transition-shadow relative flex flex-col items-center justify-between`} style={{ width: "241px", height: "328px", borderRadius: "16px", padding: 0, boxShadow: "2px 2px 16px 0px #0000001A" }}>
+      {device.comingSoon && (
+        <div className="absolute top-2 right-2 bg-orange-500 text-white text-xs px-2 py-1 rounded">
+          Coming Soon
+        </div>
+      )}
+      <div className="device-name-container" style={{ width: "241px", height: "56px", gap: "10px", padding: "16px 24px", display: "flex", alignItems: "center", boxShadow: "0px -1px 0px 0px #F0F0F0 inset" }}>
+        <h3 className="w-full text-left truncate device-name-text" style={{ fontFamily: 'Noto Sans Thai', fontWeight: 600, fontSize: '16px', lineHeight: '24px', color: '#1F2937' }}>{device.name}</h3>
+      </div>
+      <div className="device-image-container bg-white rounded-lg overflow-hidden flex items-center justify-center" style={{ width: "241px", height: "192px" }}>
+        <img src={device.image} alt={device.name} width={241} height={192} style={{ objectFit: "contain" }} />
+      </div>
+      <div className="device-sensor-container w-full text-left" style={{ fontFamily: 'Noto Sans Thai', fontSize: '14px', color: '#4B5563', width: "241px", height: "80px", padding: "16px 24px", display: "flex", flexDirection: "column", justifyContent: "center" }}>
+        <div>{device.compatibleSensors} Compatible Sensors</div>
+        <div>{device.compatibleOutputs} Compatible Outputs</div>
+      </div>
+    </div>
+  );
+}
+
+// Pagination component
+function Pagination({ currentPage, totalPages, onPageChange }: { currentPage: number; totalPages: number; onPageChange: (page: number) => void; }) {
+  const getPageNumbers = () => {
+    const pages = [];
+    if (totalPages <= 7) {
+      for (let i = 1; i <= totalPages; i++) pages.push(i);
+    } else if (currentPage <= 4) {
+      pages.push(1, 2, 3, 4, 5, '...', totalPages);
+    } else if (currentPage >= totalPages - 3) {
+      pages.push(1, '...', totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages);
+    } else {
+      pages.push(1, '...', currentPage - 1, currentPage, currentPage + 1, '...', totalPages);
+    }
+    return pages;
+  };
+
+  return (
+    <div className="flex justify-center items-center mt-8 select-none" style={{ gap: '10px' }}>
+      <button disabled={currentPage === 1} onClick={() => onPageChange(currentPage - 1)} aria-label="Previous page" style={{ width: '32px', height: '32px', borderRadius: '6px', border: '1px solid', borderColor: currentPage === 1 ? '#E5E7EB' : '#D1D5DB', background: '#FFF', color: currentPage === 1 ? '#D1D5DB' : '#6B7280', cursor: currentPage === 1 ? 'not-allowed' : 'pointer' }}>&#60;</button>
+      {getPageNumbers().map((page, idx) => page === '...'
+        ? <span key={idx} style={{ color: '#D1D5DB' }}>…</span>
+        : <button key={page} onClick={() => onPageChange(Number(page))} style={{ width: '32px', height: '32px', borderRadius: '6px', border: '1px solid', borderColor: currentPage === page ? '#F29532' : '#D1D5DB', background: '#FFF', color: currentPage === page ? '#F29532' : '#1F2937', cursor: 'pointer' }}>{page}</button>
+      )}
+      <button disabled={currentPage === totalPages} onClick={() => onPageChange(currentPage + 1)} aria-label="Next page" style={{ width: '32px', height: '32px', borderRadius: '6px', border: '1px solid', borderColor: currentPage === totalPages ? '#E5E7EB' : '#D1D5DB', background: '#FFF', color: currentPage === totalPages ? '#D1D5DB' : '#6B7280', cursor: currentPage === totalPages ? 'not-allowed' : 'pointer' }}>&#62;</button>
+    </div>
+  );
+}
+
+// Main component
+function CompatibleDevicesPage() {
+  const [searchTerm, setSearchTerm] = useState<string>('');
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const itemsPerPage = 12;
+
+  const filteredDevices = useMemo(() => {
+    return devices.filter(device => !device.comingSoon && device.name.toLowerCase().includes(searchTerm.toLowerCase()));
+  }, [searchTerm]);
+
+  const totalPages = Math.ceil(filteredDevices.length / itemsPerPage);
+  const currentDevices = filteredDevices.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+  return (
+    <div className="w-full min-h-screen flex flex-col items-center bg-transparent px-2 sm:px-4 md:px-0" style={{ fontFamily: 'Noto Sans Thai, sans-serif' }}>
+      <div className="w-full max-w-7xl flex-1 flex flex-col py-8">
+        <div className="mb-8 w-full">
+          <div className="flex flex-col sm:flex-row items-start gap-4 w-full">
+            <div className="h-[60px] sm:h-[98px] w-[2px] mt-1" style={{ background: 'linear-gradient(180deg, #FF9F3B 0%, #DC5932 100%)' }} />
+            <div className="flex-1 w-full">
+              <h1 className="font-bold text-[32px] sm:text-[48px] leading-[40px] sm:leading-[72px] text-black/90 mb-1">Compatible Devices</h1>
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mt-2 w-full">
+                <span className="text-[16px] sm:text-[18px] text-gray-600 w-full sm:w-[624px]">Select a microcontroller to see compatible devices</span>
+                <div className="relative w-full sm:w-[342px] h-[40px] mt-1 sm:mt-0">
+                  <input type="text" placeholder="Search" value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }} className="w-full h-full bg-transparent pl-3 pr-10 border border-gray-300 rounded-lg" />
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2"><Search className="h-5 w-5 text-gray-400" /></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        {currentDevices.length > 0 ? (
+          <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 w-full">
+            {currentDevices.map(device => <DeviceCard key={device.id} device={device} />)}
+          </div>
+        ) : (
+          <div className="text-center py-12">
+            <p className="text-gray-500">No devices found matching "{searchTerm}"</p>
+          </div>
+        )}
+        {totalPages > 1 && (
+          <div className="flex justify-end mt-8">
+            <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default CompatibleDevicesPage;
