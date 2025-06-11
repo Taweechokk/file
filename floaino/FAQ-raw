@@ -1,0 +1,160 @@
+import React, { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
+import { Plus, Minus } from "lucide-react";
+import Expand from "react-expand-animated";
+import { assets_path } from "@/stores/config";
+import { contents } from "@/components/faqComponent/contents";
+
+const QuestionsFAQ = (props: any) => {
+  const [selectedList, setSelectedList] = useState<number[]>([]);
+  const t = useTranslations("pages.faq");
+
+  return (
+    <div className="flex flex-col w-full gap-4">
+      {props.content.map((content: any, Qindex: number) => {
+        const isSelect = selectedList.includes(Qindex);
+        const answerContent = (
+          <div dangerouslySetInnerHTML={{ __html: t.raw(content.answer) }} />
+        );
+        return (
+          <div
+            key={Qindex}
+            style={{
+              width: "100%",
+              backgroundColor: "white",
+              border: "1px solid #bbb",
+              borderRadius: "48px",
+              padding: "14px 20px",
+              cursor: "pointer",
+              // prevent select text
+              userSelect: "none",
+            }}
+            className="shadow"
+            onClick={() => {
+              if (isSelect) {
+                setSelectedList(selectedList.filter((i) => i !== Qindex));
+              }
+            }}
+          >
+            <div
+              style={{
+                width: "100%",
+                display: "flex",
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <div style={{ padding: 2, fontSize: "18px", fontWeight: "bold" }}>
+                {Qindex + 1}. {t(content.question)}
+              </div>
+              <div
+                style={{
+                  padding: 2,
+                  fontSize: "32px",
+                  backgroundColor: "#0389F2",
+                  borderRadius: "50%",
+                  color: "white",
+                  minWidth: "28px",
+                  minHeight: "28px",
+                  maxWidth: "28px",
+                  maxHeight: "28px",
+                  cursor: "pointer",
+                  // prevent select text
+                  userSelect: "none",
+                }}
+                className="center"
+                onClick={() => {
+                  if (isSelect) {
+                    setSelectedList(selectedList.filter((i) => i !== Qindex));
+                  } else {
+                    setSelectedList([...selectedList, Qindex]);
+                  }
+                }}
+              >
+                {!isSelect ? "-" : "+"}
+              </div>
+            </div>
+            <div>
+              <Expand open={!isSelect} duration={100}>
+                <div
+                  className="wysiwyg-content"
+                  style={{
+                    marginTop: 24,
+                    padding: 20,
+                    fontSize: "18px",
+                    backgroundColor: "#EFF8FF",
+                    borderRadius: "32px",
+                    lineHeight: "30px",
+                  }}
+                >
+                  {answerContent}
+                </div>
+              </Expand>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+const FAQPage = () => {
+  useEffect(() => window.scrollTo(0, 0), []);
+
+  const t = useTranslations("pages.faq");
+
+  return (
+      <div style={{ minHeight: "calc(100vh - 128px)" }}>
+        <div
+          style={{
+            height: "444px",
+            borderRadius: "0px 0px 24px 24px",
+            backgroundColor: "#0389F2",
+            position: "absolute",
+            top: "0px",
+            zIndex: -1,
+          }}
+          className="w-full pt-20 center"
+        >
+          <div className="flex flex-row justify-between w-4/5 max-w-[1280px] relative">
+            <div
+              style={{
+                color: "white",
+                padding: "0 0 50px 0",
+                backgroundColor: "#0389F2AA",
+                borderRadius: "32px",
+              }}
+            >
+              <div style={{ fontSize: "44px", fontWeight: "bold" }}>
+                {t("title")}
+              </div>
+              <div style={{ fontSize: "20px" }}>{t("description")}</div>
+            </div>
+            <img
+              src={`${assets_path}images/questionmarks.png`}
+              alt="questionmarks"
+              width={402}
+              height={309}
+              style={{
+                position: "absolute",
+                right: "0px",
+                bottom: "-60px",
+                zIndex: -1,
+              }}
+            />
+          </div>
+        </div>
+        <div className="w-full center">
+          <div
+            className="pb-16 w-4/5 max-w-[1280px]"
+            style={{ marginTop: "calc(400px - 72px)" }}
+          >
+            <QuestionsFAQ content={contents} />
+          </div>
+        </div>
+      </div>
+  );
+};
+
+export default FAQPage;
