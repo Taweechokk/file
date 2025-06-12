@@ -1,0 +1,141 @@
+import React, { useState } from 'react';
+import { Plus, Minus } from '@phosphor-icons/react';
+
+interface FAQItem {
+  id: number;
+  question: string;
+  answer: string | JSX.Element;
+}
+
+const FAQ: React.FC = () => {
+  const [activeItems, setActiveItems] = useState<number[]>([]);
+
+  const toggleItem = (id: number) => {
+    setActiveItems(prev => 
+      prev.includes(id) 
+        ? prev.filter(item => item !== id)
+        : [...prev, id]
+    );
+  };
+
+  const faqData: FAQItem[] = [
+    {
+      id: 1,
+      question: "What is AIThaiGen?",
+      answer: "AIThaiGen is an advanced artificial intelligence platform designed to provide intelligent solutions for various business and personal needs. It combines cutting-edge machine learning algorithms with user-friendly interfaces to deliver powerful AI capabilities that can help automate tasks, analyze data, and provide intelligent insights."
+    },
+    {
+      id: 2,
+      question: "Which browser is recommended for using AIThaiGen?",
+      answer: "We recommend using the latest versions of modern browsers for the best experience with AIThaiGen. Chrome, Firefox, Safari, and Microsoft Edge are all fully supported. For optimal performance, ensure your browser supports JavaScript and has hardware acceleration enabled. We also recommend keeping your browser updated to the latest version for security and performance benefits."
+    },
+    {
+      id: 3,
+      question: "How should I fix it if the webcam fails to open?",
+      answer: (
+        <div className="space-y-3">
+          <p>Please follow these troubleshooting steps:</p>
+          <div className="space-y-2 text-sm">
+            <p><strong>1.</strong> Check whether the webcam is functioning correctly by testing it with external programs or websites like <a href="https://webcammictest.com/" className="text-blue-600 hover:underline">https://webcammictest.com/</a></p>
+            <p><strong>2.</strong> Verify that your browser has permission to access the webcam</p>
+          </div>
+          <div className="mt-4">
+            <iframe
+              width="100%"
+              height="315"
+              src="https://www.youtube.com/embed/1QqYV6yFz6A"
+              title="How to enable camera permissions"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+              className="rounded-lg shadow-sm"
+            ></iframe>
+          </div>
+        </div>
+      )
+    },
+    {
+      id: 4,
+      question: "What could cause some functions to malfunction or not display results as expected, and what are the possible solutions for each cause?",
+      answer: "Several factors can cause functionality issues in AIThaiGen: 1) Network connectivity problems - ensure you have a stable internet connection and try refreshing the page. 2) Browser compatibility issues - update to the latest browser version or try a different browser. 3) Cache and cookies - clear your browser cache and cookies, then restart the browser. 4) JavaScript disabled - ensure JavaScript is enabled in your browser settings. 5) Ad blockers or extensions - temporarily disable browser extensions that might interfere with the platform. 6) Server overload - during peak times, try accessing the platform later. 7) Outdated browser - ensure you're using a supported browser version with the latest updates."
+    },
+    {
+      id: 5,
+      question: "What should I do if images fail to load?",
+      answer: "If images are not loading properly, try these solutions: 1) Check your internet connection stability and speed. 2) Clear your browser cache and cookies. 3) Disable any ad blockers or image-blocking extensions temporarily. 4) Try using a different browser or incognito/private mode. 5) Ensure your browser allows images to load from our domain. 6) Check if your firewall or antivirus is blocking image requests. 7) Try refreshing the page or logging out and back in. 8) If the problem persists, the images might be temporarily unavailable from our servers - please try again later."
+    },
+    {
+      id: 6,
+      question: "How can the micro:bit V2 board be used with AIThaiGen?",
+      answer: "The micro:bit V2 board can be integrated with AIThaiGen through our IoT connectivity features. You can: 1) Connect your micro:bit V2 via USB or Bluetooth to send sensor data to AIThaiGen for analysis. 2) Use AIThaiGen's machine learning models to process data from micro:bit sensors like accelerometer, magnetometer, and temperature sensors. 3) Program the micro:bit to respond to AI-generated commands or predictions. 4) Create interactive projects where AIThaiGen processes micro:bit input and provides intelligent responses. 5) Use our visual programming interface to set up data flows between your micro:bit and AI models. 6) Access our micro:bit integration tutorials and sample projects in the documentation section."
+    },
+    {
+      id: 7,
+      question: "What should I do if the micro:bit fails to read data?",
+      answer: "If your micro:bit V2 is not reading data properly: 1) Check the physical connections - ensure all wires and components are properly connected. 2) Verify the power supply - make sure the micro:bit has adequate power (battery or USB). 3) Review your code - check for syntax errors or logical issues in your micro:bit program. 4) Test the sensors individually - isolate each sensor to identify which component is causing issues. 5) Update the micro:bit firmware to the latest version. 6) Try using different pins or sensors to rule out hardware failures. 7) Check the serial monitor for error messages or debugging information. 8) Restart both the micro:bit and your computer/device. 9) Refer to our micro:bit troubleshooting guide or contact support if issues persist."
+    }
+  ];
+
+  return (
+    <div className="min-h-screen polka w-full font-[Noto sans Thai] ">
+      {/* Main Content */}
+      <div className="max-w-[1032px] mx-auto pt-[80px] px-4">
+        <div className="flex flex-col md:flex-row gap-6 "
+        >
+          {/* Left Side - FAQ Title */}
+          <div className="max-w-[342px] max-h-[104px] md:max-h-[132px] gap-3 pl-[24px] md:pl-[29px] w-full"
+            style={{
+              borderLeft: "2px solid",
+              borderImage: "linear-gradient(180deg, #FF9F3B 0%, #DC5932 100%) 2",
+            }}
+          >
+            <h1 className="text-[32px] font-bold md:text-[48px] ">FAQ</h1>
+            <p className=" text-[14px] md:text-[16px] max-w-[284px]">Real user questions and answers to all usage queries</p>
+          </div>
+
+          {/* Right Side - FAQ Items */}
+          <div className="max-w-[343px] w-full md:max-w-[666px] gap-4 flex flex-col items-center mx-auto">
+            {/* FAQ Items List */}
+            {faqData.map((item) => (
+              <div key={item.id} className="bg-white rounded-lg shadow-sm border border-[#D9D9D9] w-full">
+                <button
+                onClick={() => toggleItem(item.id)}
+                className="w-full px-4 py-3 text-left flex items-center justify-between hover:bg-gray-50 transition-colors duration-200"
+                >
+                <div className="flex items-center space-x-3">
+                  <span className="text-[16px] font-[600]">
+                    {item.id}. {item.question}
+                  </span>
+                </div>
+                <div className="flex-shrink-0 ml-4">
+                  <span className="bg-orange-400 text-white rounded-full w-[22.75px] h-[22.75px] flex items-center justify-center">
+                  {activeItems.includes(item.id) ? (
+                    <Minus size={14} weight="bold" />
+                  ) : (
+                    <Plus size={14} weight="bold" />
+                  )}
+                  </span>
+                </div>
+                </button>
+                
+                {activeItems.includes(item.id) && (
+                <div className="px-4 pb-4 bg-gray-50">
+                  <div className="ml-8 text-gray-700 leading-relaxed text-base">
+                  {typeof item.answer === 'string' ? (
+                    <p>{item.answer}</p>
+                  ) : (
+                    item.answer
+                  )}
+                  </div>
+                </div>
+                )}
+              </div>
+            ))}
+
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default FAQ;
