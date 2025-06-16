@@ -1,0 +1,240 @@
+import React, { useState } from 'react';
+import { Eye, EyeOff } from 'lucide-react';
+
+interface LoginFormData {
+  email: string;
+  username: string;
+  firstName: string;
+  lastName: string;
+  confirmPassword: string;
+  school: string;
+  type: string;
+  password: string;
+}
+
+const LoginPage: React.FC = () => {
+  const [formData, setFormData] = useState<LoginFormData>({
+    email: '',
+    username: '',
+    firstName: '',
+    lastName: '',
+    confirmPassword: '',
+    school: '',
+    type: '',
+    password: ''
+  });
+  
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [agreeTerms, setAgreeTerms] = useState(false);
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    console.log('Form submitted:', formData);
+  };
+
+  return (
+    <div className="min-h-screen flex font-[Noto sans Thai] ">
+    {/* Main card */}
+      <div className="w-full mb-[100px] md:mb-[100px] mx-auto mt-[113px] max-w-[1032px] max-h-[712px] flex flex-col md:flex-row md:rounded-[24px] 
+      md:shadow-[0_0_2px_0px_rgba(0,0,0,0.16),0_4px_24px_0px_rgba(0,0,0,0.12)] bg-white relative z-10 overflow-hidden">
+      {/* Left Side - Robot Image (Hidden on mobile) */}
+        <div className="hidden lg:flex lg:w-1/2 bg-gray-100 items-center justify-center p-8">
+            <div className="relative">
+            <div className="w-80 h-80 bg-gradient-to-br from-gray-300 to-gray-400 rounded-full flex items-center justify-center shadow-lg">
+                <div className="w-64 h-64 bg-white rounded-full flex items-center justify-center">
+                <div className="text-center">
+                    <div className="w-20 h-20 bg-gray-800 rounded-full mx-auto mb-4 flex items-center justify-center">
+                    <div className="flex space-x-2">
+                        <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
+                        <div className="w-2 h-2 bg-white rounded-full animate-pulse delay-100"></div>
+                        <div className="w-6 h-1 bg-white rounded-full"></div>
+                    </div>
+                    </div>
+                    <div className="w-12 h-8 bg-gray-300 rounded mx-auto"></div>
+                </div>
+                </div>
+            </div>
+            {/* Robot arms */}
+            <div className="absolute -left-8 top-1/2 transform -translate-y-1/2">
+                <div className="w-16 h-6 bg-gray-300 rounded-full"></div>
+            </div>
+            <div className="absolute -right-8 top-1/2 transform -translate-y-1/2">
+                <div className="w-16 h-6 bg-gray-300 rounded-full"></div>
+            </div>
+            </div>
+        </div>
+
+        {/* Right Side - Registration Form */}
+        <div className="w-full lg:w-1/2 flex items-center justify-center p-6 lg:p-12 h-full overflow-y-auto">
+          <div className="w-full max-w-md h-full flex flex-col justify-center">
+            <div className="text-center mb-4">
+              <h1 className="text-xl lg:text-2xl font-bold text-gray-800 mb-2 leading-tight break-words">
+                ลงทะเบียน <span className="text-orange-500">ผู้ใช้งานใหม่</span>
+              </h1>
+            </div>
+            <div className="space-y-3 text-base lg:text-sm">
+              {/* First Name Field */}
+              <div>
+                <input
+                  type="text"
+                  name="firstName"
+                  placeholder="ชื่อ"
+                  value={formData.firstName}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                  required
+                />
+              </div>
+              {/* Last Name Field */}
+              <div>
+                <input
+                  type="text"
+                  name="lastName"
+                  placeholder="นามสกุล"
+                  value={formData.lastName}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                  required
+                />
+              </div>
+              {/* Email Field */}
+              <div>
+                <input
+                  type="email"
+                  name="email"
+                  placeholder="อีเมล"
+                  value={formData.email}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                  required
+                />
+              </div>
+
+              {/* Password Field */}
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  name="password"
+                  placeholder="รหัสผ่าน"
+                  value={formData.password}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                >
+                  {/* Default to EyeOff icon when password is hidden */}
+                  {!showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                </button>
+              </div>
+
+              {/* Confirm Password Field */}
+              <div className="relative">
+                <input
+                  type={showConfirmPassword ? "text" : "password"}
+                  name="confirmPassword"
+                  placeholder="ยืนยันรหัสผ่าน"
+                  value={formData.confirmPassword}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                >
+                  {/* Default to EyeOff icon when confirm password is hidden */}
+                  {!showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                </button>
+              </div>
+
+              {/* School Field */}
+              <div>
+                <input
+                  type="text"
+                  name="school"
+                  placeholder="โรงเรียน"
+                  value={formData.school}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                  required
+                />
+              </div>
+
+              {/* Type Field */}
+              <div className="relative">
+                <select
+                  name="type"
+                  value={formData.type}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white appearance-none"
+                  required
+                >
+                  <option value="">ระดับชั้นที่ศึกษา</option>
+                  <option value="elementary">ประถมศึกษา</option>
+                  <option value="secondary">มัธยมศึกษา</option>
+                  <option value="high-school">มัธยมปลาย</option>
+                  <option value="university">มหาวิทยาลัย</option>
+                </select>
+                <span className="pointer-events-none absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400">
+                  <svg width="20" height="20" fill="none" viewBox="0 0 24 24"><path d="M7 10l5 5 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                </span>
+              </div>
+
+              {/* Terms and Conditions */}
+              <div className="flex items-start space-x-3">
+                <input
+                  type="checkbox"
+                  id="terms"
+                  checked={agreeTerms}
+                  onChange={(e) => setAgreeTerms(e.target.checked)}
+                  className="mt-1 w-4 h-4 text-orange-500 border-gray-300 rounded focus:ring-orange-500"
+                  required
+                />
+                <label htmlFor="terms" className="text-sm text-gray-600 leading-5">
+                  ฉันยอมรับข้อตกลงและเงื่อนไข{' '}
+                  <a href="#" className="text-blue-500 hover:text-blue-700 ">
+                  นโยบายความเป็นส่วนตัว
+                  </a>
+                </label>
+              </div>
+
+              {/* Register Button */}
+              <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={!agreeTerms}
+              className="w-full bg-orange-500 hover:bg-orange-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold py-3 px-4 rounded-lg transition duration-200 text-lg"
+              >
+              Register
+              </button>
+
+              {/* Login Link */}
+              <div className="text-center mt-6">
+                <span className="text-gray-600">หากมีบัญชีอยู่แล้ว </span>
+                <a href="#" className="text-blue-500 hover:text-blue-700 font-medium">
+                    ลงชื่อเข้าใช้
+                </a>
+              </div>
+            </div>
+            </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default LoginPage;
