@@ -1,0 +1,177 @@
+import React, { useState } from 'react';
+import { Eye, EyeSlash } from "@phosphor-icons/react";
+import Image from "next/image";
+
+const LoginPage: React.FC = () => {
+  const [showPassword, setShowPassword] = useState(false);
+  const [Email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
+  const togglePasswordVisibility = () => {
+    setShowPassword(!showPassword);
+  };
+
+  const handleLogin = () => {
+    console.log("Login attempted with:", { Email, password });
+    // Handle login logic here
+  };
+
+  const handleRegister = () => {
+    console.log("Register clicked");
+    // Handle register navigation here
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-white">
+      {/* Main card */}
+      <div
+        className="mb-[100px] lg:mb-[100px] mt-[113px] max-w-[1032px] max-h-[712px] flex flex-col 
+      md:flex-row md:rounded-[24px] md:shadow-[0_0_2px_0px_rgba(0,0,0,0.16),0_4px_24px_0px_rgba(0,0,0,0.12)] bg-white relative z-10 w-full"
+      >
+        {/* Left Side - Image (hidden on mobile) */}
+        <div className="hidden md:flex items-center justify-center md:w-1/2 h-full relative">
+          <div className="my-3">
+            <div className="relative flex items-center justify-center max-w-[503px] max-h-[688px] overflow-hidden rounded-[12px]">
+              <Image
+                src="/images/graphic-login.svg"
+                alt="Login Graphic"
+                width={503}
+                height={688}
+                className="object-cover w-full h-full "
+                priority
+              />
+            </div>
+          </div>
+          {/* Robot mascot - bottom left, only on desktop */}
+          <div className="hidden md:block absolute left-[-120px] bottom-[-130px] z-20">
+            <Image
+              src="/images/robotLogin.svg"
+              alt="Robot Login"
+              width={355}
+              height={231}
+              className="drop-shadow-xl"
+              priority
+            />
+          </div>
+        </div>
+
+        {/* Left Side - Header + Login Form (centered on mobile, left on desktop) */}
+        <div className="w-full md:w-1/2 h-full flex flex-col items-center justify-center px-4 md:px-10 pt-10">
+          <div className="w-full max-w-[350px] items-center justify-center">
+            {/* Header */}
+            <div className="flex flex-col items-center justify-center w-full mb-8">
+              <h1 className="text-3xl lg:text-4xl font-bold text-center leading-tight">
+                <span className="text-[32px] font-[700] bg-gradient-to-r from-[#FF6704] to-[#3DA5FA] bg-clip-text text-transparent">
+                  ยินดีต้อนรับเข้าสู่
+                </span>
+                <br />
+                <span className="text-[32px] font-[700] text-gray-900">
+                  โลกของปัญญาประดิษฐ์
+                </span>
+              </h1>
+              <p className="text-[16px] text-center text-gray-500 mt-2">
+                เข้าถึงกลุ่มสาระการเรียนรู้ต่างๆ ได้ฟรี!
+              </p>
+            </div>
+            {/* Login Form */}
+            <div className="space-y-6">
+              {/* Email Input */}
+              <div className="space-y-1">
+                <div className="rounded-xl border border-gray-300 bg-gray-50 px-4 py-2 flex flex-col">
+                  <label className="block text-sm font-medium text-gray-700 ">
+                    E-mail
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={Email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="Email"
+                      className="w-full  pr-10 bg-transparent outline-none text-lg border-none focus:ring-0 focus:outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+              {/* Password Input */}
+              <div className="space-y-1">
+                <div className="rounded-xl border border-gray-300 bg-gray-50 px-4 py-2 flex flex-col">
+                  <label className="block text-sm font-medium text-gray-700 ">
+                    Password
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="Password"
+                      className="w-full  pr-10 bg-transparent outline-none text-lg border-none focus:ring-0 focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={togglePasswordVisibility}
+                      className="absolute right-0 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                    >
+                      {/* Default to EyeSlash icon when password is hidden */}
+                      {!showPassword ? (
+                        <EyeSlash size={24} />
+                      ) : (
+                        <Eye size={24} />
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+              {/* Forget Password Link */}
+              <div className="w-full text-right -mt-2">
+                <a
+                  href="#"
+                  className="text-blue-500 hover:text-blue-600 text-base font-medium transition-colors"
+                >
+                  Forget Password
+                </a>
+              </div>
+              {/* Login Button */}
+              <button
+                type="button"
+                onClick={handleLogin}
+                className="w-full bg-gradient-to-r from-orange-500 to-orange-600 text-white py-4 px-6 rounded-xl font-semibold text-lg hover:from-orange-600 hover:to-orange-700 transform hover:scale-[1.02] transition-all duration-200 shadow-lg hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2"
+              >
+                Login
+              </button>
+              {/* Divider */}
+              <div className="text-center text-base text-gray-500 py-2">
+                หากยังไม่มีบัญชีผู้ใช้งาน คลิกปุ่มด้านล่าง
+              </div>
+              {/* Register Button */}
+              <button
+                type="button"
+                onClick={() => (window.location.href = "/register")}
+                className="w-full bg-white border-2 border-gray-300 text-gray-700 py-4 px-6 rounded-xl font-semibold text-lg hover:bg-gray-50 hover:border-gray-400 transform hover:scale-[1.02] transition-all duration-200 shadow-sm hover:shadow-md focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 relative flex items-center justify-center"
+              >
+                <span>Register</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Mobile Background Pattern - Only visible on small screens */}
+        <div className="lg:hidden absolute inset-0 opacity-5 pointer-events-none">
+          <div className="grid grid-cols-8 gap-1 h-full p-4">
+            {Array.from({ length: 64 }).map((_, i) => (
+              <div
+                key={i}
+                className={`rounded-sm ${
+                  (Math.floor(i / 8) + i) % 2 === 0
+                    ? "bg-gray-300"
+                    : "bg-gray-200"
+                }`}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default LoginPage;
