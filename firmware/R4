@@ -1,0 +1,1448 @@
+// =============================================================================
+// Arduino UNO R4 WiFi Serial + WiFi + MQTT Firmware - EEPROM Configurable Version
+// Non-blocking WiFi/MQTT connections with comprehensive sensor support
+// Serial communication works immediately, WiFi connects in background
+// WiFi credentials and token stored in EEPROM and configurable via commands
+// =============================================================================
+
+// Include Libraries
+#include <Arduino.h>
+#include <WiFiS3.h>
+#include <ArduinoJson.h>
+#include <PubSubClient.h>
+#include <EEPROM.h>
+#include <OneWire.h>
+#include <DallasTemperature.h>
+#include <Wire.h>
+#include <SPI.h>
+#include "DHT.h"
+#include <Adafruit_Sensor.h>
+#include <Adafruit_BME280.h>
+#include <TM1637.h>
+#include "LCDManager.h"
+#include "BH1750Manager.h"
+#include "Modulino.h" // Modlino kit
+#include "Arduino_LED_Matrix.h" // LED matrix
+#include <VarSpeedServoRA4M1.h> // Servo library for R4
+
+// =============================================================================
+// FIRMWARE INFORMATION
+// =============================================================================
+#define NAME              "unor4_serial_wifi"
+#define VERSION           "38"
+
+// =============================================================================
+// EEPROM CONFIGURATION
+// =============================================================================
+#define EEPROM_MAGIC      0xAB  // Magic byte to check if EEPROM is initialized
+
+// EEPROM Memory Layout
+#define EEPROM_MAGIC_ADDR     0
+#define EEPROM_SSID_ADDR      1
+#define EEPROM_PASSWORD_ADDR  65   // SSID max 64 chars
+#define EEPROM_TOKEN_ADDR     129  // Password max 64 chars
+#define EEPROM_RESERVED_ADDR  193  // Token max 64 chars
+
+// String length limits
+#define MAX_SSID_LENGTH     64
+#define MAX_PASSWORD_LENGTH 64
+#define MAX_TOKEN_LENGTH    64
+
+// =============================================================================
+// DEFAULT CONFIGURATION (fallback values)
+// =============================================================================
+#define DEFAULT_WIFI_SSID     "**Your WiFi SSID**"
+#define DEFAULT_WIFI_PASSWORD "**Your WiFi Password**"
+#define DEFAULT_TOKEN         "**AIThaiGen Token**"
+
+// =============================================================================
+// THINGSBOARD/MQTT CONFIGURATION
+// =============================================================================
+#define THINGSBOARD_SERVER  "gateway.aithaigen.in.th"
+#define THINGSBOARD_PORT    1883
+#define KEY_INPUT           "WEB_REQUEST"
+#define KEY_OUTPUT          "MCU_RESPONSE"
+
+// =============================================================================
+// COMMAND DEFINITIONS
+// =============================================================================
+// Ping
+#define PING              "ping"
+
+// EEPROM Commands
+#define GET_CONFIGS       "get"
+#define SET_CONFIGS       "set"
+#define RESET_CONFIGS     "reset"
+#define GET_STATUS        "status"
+
+// GPIO Commands
+#define DIGITAL_READ      "dr"
+#define DIGITAL_WRITE     "dw"
+#define ANALOG_READ       "ar"
+#define ANALOG_WRITE      "aw"
+
+// Sensor Commands
+#define READ_BME280       "b280"
+#define READ_BH1750       "bh1750"
+#define READ_DHT11        "d11"
+#define READ_DHT22        "d22"
+#define READ_DS18B20      "ds18"
+#define READ_TMP36        "t36"
+#define READ_ULTRASONIC   "ult"
+#define SET_MICROPHONE    "mic"
+
+// Actuator Commands
+#define MOVE_SERVO        "srv"
+#define MOVE_ROBOTIC_ARM  "arm"
+#define WRITE_7_SEGMENT   "seg4"
+#define WRITE_RGB_LED     "rgb"
+#define WRITE_LCD16x2     "lcd"
+#define PLAY_TONE         "buz"
+
+// Modulino Commands
+#define MODULINO_BUTTONS  "m2btn"
+#define MODULINO_BUZZER   "m2buz"
+#define MODULINO_PIXELS   "m2pxl"
+#define MODULINO_KNOB     "m2knb"
+#define MODULINO_DISTANCE "m2ult"
+#define MODULINO_MOVEMENT "m2imu"
+#define MODULINO_THERMO   "m2tmp"
+
+// R4 On Board Commands
+#define R4_MATRIX_PATTERN "r4mx"
+
+// I2C Commands
+#define GET_I2C_ADDRESS   "i2c"
+
+// =============================================================================
+// BUFFER AND TIMING CONFIGURATION
+// =============================================================================
+#define COMMAND_BUFFER_SIZE 128
+#define MAX_SERVOS            6
+
+// Connection timing constants
+#define WIFI_RETRY_INTERVAL     5000    // Try WiFi every 5 seconds
+#define MQTT_RETRY_INTERVAL     3000    // Try MQTT every 3 seconds
+#define WIFI_MAX_ATTEMPTS       5       // Maximum WiFi connection attempts
+#define MQTT_MAX_ATTEMPTS       3       // Maximum MQTT connection attempts
+
+// Ping LED blink timing constants
+#define PING_BLINK_INTERVAL     200     // Interval for LED blinks in milliseconds
+#define PING_BLINK_COUNT        3       // Number of blinks for PING command
+
+// DHT sensor initialization timing
+#define DHT_INIT_DELAY          2000    // Time to wait for DHT sensor initialization in milliseconds
+
+// =============================================================================
+// GLOBAL OBJECTS AND VARIABLES
+// =============================================================================
+// WiFi and MQTT client
+WiFiClient wifiClient;
+PubSubClient client(wifiClient);
+
+// Configuration variables (loaded from EEPROM)
+String wifiSSID = "";
+String wifiPassword = "";
+String mqttToken = "";
+
+// Connection state variables
+bool wifiConnected = false;
+bool mqttConnected = false;
+unsigned long lastWifiAttempt = 0;
+unsigned long lastMqttAttempt = 0;
+unsigned long wifiStartTime = 0;
+bool wifiAttempting = false;
+int wifiAttemptCount = 0;
+int mqttAttemptCount = 0;
+bool wifiGiveUp = false; 
+bool mqttGiveUp = false; 
+
+// Response tracking
+String lastResponse = "";
+
+// Ping LED blink state variables
+bool pingBlinking = false;
+unsigned long pingBlinkStartTime = 0;
+int pingBlinkCounter = 0;
+bool pingLedState = false;
+
+// Sensor & Actuator objects
+// LED Matrix -------------------------------------------
+ArduinoLEDMatrix  matrix;
+const uint32_t heart[] = {0x3184a444, 0x44042081, 0x100a0040}; // Heart shape pattern
+
+// BME280 Sensor -------------------------------------------
+Adafruit_BME280 bme;
+
+// Servo motors management -------------------------------------------
+void moveServo(int pin, int angle, int speed );
+VarSpeedServoRA4M1 servo_motors[MAX_SERVOS];
+bool servo_pins_used[MAX_SERVOS] = {false};
+int servo_pin_mapping[MAX_SERVOS] = {-1}; // Maps index to actual pin number
+
+// Global Variable: DHT -------------------------------------------
+struct DHTSensor {
+  int pin;
+  DHT* sensor;
+  bool initialized;
+  bool initializing; // Flag to track initialization state
+  unsigned long initStartTime; // Time when initialization started
+};
+const int MAX_DHT_SENSORS = 5;
+DHTSensor dhtSensors[MAX_DHT_SENSORS];
+bool dhtArrayInitialized = false;
+
+// Microphone management -------------------------------------------
+bool EnableMicrophone = false;
+int microphonePin;
+String microphoneId;
+
+// Global Variable: Modulino -------------------------------------------
+ModulinoButtons   buttons;
+ModulinoBuzzer    buzzer;
+ModulinoPixels    leds;
+ModulinoKnob      encoder;
+ModulinoDistance  distance;
+ModulinoMovement  imu;
+ModulinoThermo    thermo;
+int notes[] = {262, 294, 330, 349, 392, 440, 494, 523}; // Array of musical notes
+int buttonsValue[] = {0, 0, 0}; // Recent buttons value
+int encoderValue = 0;  // Modulino Knob - Recent encoder value
+int encoderButton = 0; // Modulino Knob - Recent encoder button value
+
+// Modulino initialization flags
+bool modulinoInitialized = false;
+bool distanceInitialized = false;
+bool buttonsInitialized = false;
+bool knobInitialized = false;
+bool movementInitialized = false;
+bool thermoInitialized = false;
+bool buzzerInitialized = false;
+bool pixelsInitialized = false;
+
+// =============================================================================
+// EEPROM FUNCTIONS
+// =============================================================================
+
+// Initialize EEPROM and load configuration
+void initializeEEPROM() {
+  // Check if EEPROM is initialized
+  if (EEPROM.read(EEPROM_MAGIC_ADDR) != EEPROM_MAGIC) {
+    Serial.println("EEPROM not initialized, setting defaults...");
+    setDefaultConfig();
+  }
+  
+  // Load configuration from EEPROM
+  loadConfigFromEEPROM();
+}
+
+// Set default configuration to EEPROM
+void setDefaultConfig() {
+  EEPROM.write(EEPROM_MAGIC_ADDR, EEPROM_MAGIC);
+  writeStringToEEPROM(EEPROM_SSID_ADDR, DEFAULT_WIFI_SSID, MAX_SSID_LENGTH);
+  writeStringToEEPROM(EEPROM_PASSWORD_ADDR, DEFAULT_WIFI_PASSWORD, MAX_PASSWORD_LENGTH);
+  writeStringToEEPROM(EEPROM_TOKEN_ADDR, DEFAULT_TOKEN, MAX_TOKEN_LENGTH);
+  Serial.println("Default configuration saved to EEPROM");
+}
+
+// Load configuration from EEPROM
+void loadConfigFromEEPROM() {
+  wifiSSID = readStringFromEEPROM(EEPROM_SSID_ADDR, MAX_SSID_LENGTH);
+  wifiPassword = readStringFromEEPROM(EEPROM_PASSWORD_ADDR, MAX_PASSWORD_LENGTH);
+  mqttToken = readStringFromEEPROM(EEPROM_TOKEN_ADDR, MAX_TOKEN_LENGTH);
+  
+  Serial.println("Configuration loaded from EEPROM:");
+  Serial.println("SSID: " + wifiSSID);
+  Serial.println("Password: " + maskPassword(wifiPassword));
+  Serial.println("Token: " + maskToken(mqttToken));
+}
+
+// Save configuration to EEPROM
+bool saveConfigToEEPROM(String ssid, String password, String token) {
+  // Validate input lengths
+  if (ssid.length() > MAX_SSID_LENGTH || 
+      password.length() > MAX_PASSWORD_LENGTH || 
+      token.length() > MAX_TOKEN_LENGTH) {
+    Serial.println("Error: Configuration values too long");
+    return false;
+  }
+  
+  // Write to EEPROM
+  EEPROM.write(EEPROM_MAGIC_ADDR, EEPROM_MAGIC);
+  writeStringToEEPROM(EEPROM_SSID_ADDR, ssid, MAX_SSID_LENGTH);
+  writeStringToEEPROM(EEPROM_PASSWORD_ADDR, password, MAX_PASSWORD_LENGTH);
+  writeStringToEEPROM(EEPROM_TOKEN_ADDR, token, MAX_TOKEN_LENGTH);
+  
+  Serial.println("Configuration saved to EEPROM successfully");
+  return true;
+}
+
+// Write弦 to EEPROM at specified address
+void writeStringToEEPROM(int address, String data, int maxLength) {
+  int len = min((int)data.length(), maxLength - 1);
+  
+  for (int i = 0; i < len; i++) {
+    EEPROM.write(address + i, data[i]);
+  }
+  EEPROM.write(address + len, 0); // Null terminator
+  
+  // Clear remaining bytes
+  for (int i = len + 1; i < maxLength; i++) {
+    EEPROM.write(address + i, 0);
+  }
+}
+
+// Read string from EEPROM at specified address
+String readStringFromEEPROM(int address, int maxLength) {
+  String data = "";
+  
+  for (int i = 0; i < maxLength; i++) {
+    char c = EEPROM.read(address + i);
+    if (c == 0) break; // Null terminator
+    data += c;
+  }
+  
+  return data;
+}
+
+// Mask password for display (show only first 2 and last 2 characters)
+String maskPassword(String password) {
+  if (password.length() <= 4) {
+    return "****";
+  }
+  return password.substring(0, 2) + "****" + password.substring(password.length() - 2);
+}
+
+// Mask token for display (show only first 4 characters)
+String maskToken(String token) {
+  if (token.length() <= 4) {
+    return "****";
+  }
+  return token.substring(0, 4) + "****";
+}
+
+// =============================================================================
+// SETUP FUNCTION
+// =============================================================================
+void setup()
+{
+  Serial.begin(115200);
+  delay(100);
+
+  // Initialize EEPROM and load configuration
+  initializeEEPROM();
+
+  // Initialize DHT pins array
+  initializeDHTArray();
+
+  // Initialize On board LED Matrix
+  matrix.begin();
+
+  // Initialize Modulino components
+  Modulino.begin();
+  
+  // Startup messages
+  Serial.println("=== Arduino UNO R4 WiFi Serial+WiFi+MQTT Controller ===");
+  Serial.println("Firmware: " + String(NAME) + " v" + String(VERSION));
+  Serial.println("Serial communication ready!");
+  Serial.println("Available commands: ping, dr, ar, dw, aw, b280, d11, ds18, t36, ult, mic, srv, seg4, rgb, lcd, buz, i2c, get, set, reset");
+  Serial.print("WiFi will attempt connection (max ");
+  Serial.print(WIFI_MAX_ATTEMPTS);
+  Serial.println(" attempts)...");
+  
+  // Setup MQTT client
+  client.setServer(THINGSBOARD_SERVER, THINGSBOARD_PORT);
+  client.setCallback(on_message);
+  
+  // Start first WiFi attempt
+  startWiFiConnection();
+
+  // Initialize LED pin for PING command
+  pinMode(LED_BUILTIN, OUTPUT);
+  digitalWrite(LED_BUILTIN, LOW);
+}
+
+// =============================================================================
+// MAIN LOOP
+// =============================================================================
+void loop()
+{
+  // Handle WiFi connection (non-blocking)
+  handleWiFiConnection();
+  
+  // Handle MQTT connection (non-blocking)
+  handleMQTTConnection();
+  
+  // Handle MQTT loop if connected
+  if (mqttConnected) {
+    client.loop();
+  }
+  
+  // Handle microphone reading if enabled
+  if (EnableMicrophone) {
+    readMicrophone();
+  }
+  
+  // Handle Serial commands (always available)
+  handleSerialCommands();
+  
+  // Handle PING LED blinking (non-blocking)
+  handlePingBlink();
+
+  // Handle DHT sensor initialization (non-blocking)
+  handleDHTInitialization();
+}
+
+// =============================================================================
+// WIFI CONNECTION FUNCTIONS
+// =============================================================================
+
+// Start WiFi connection attempt
+void startWiFiConnection() {
+  if (!wifiAttempting && !wifiGiveUp && 
+      (millis() - lastWifiAttempt > WIFI_RETRY_INTERVAL) &&
+      wifiAttemptCount < WIFI_MAX_ATTEMPTS) {
+    
+    wifiAttemptCount++;
+    Serial.print("WiFi attempt ");
+    Serial.print(wifiAttemptCount);
+    Serial.print("/");
+    Serial.print(WIFI_MAX_ATTEMPTS);
+    Serial.print(" - Connecting to: ");
+    Serial.println(wifiSSID);
+    
+    WiFi.begin(wifiSSID.c_str(), wifiPassword.c_str());
+    wifiAttempting = true;
+    wifiStartTime = millis();
+    lastWifiAttempt = millis();
+  } else if (wifiAttemptCount >= WIFI_MAX_ATTEMPTS && !wifiGiveUp) {
+    wifiGiveUp = true;
+    Serial.println("✗ WiFi: Maximum attempts reached, giving up");
+  }
+}
+
+// Handle WiFi connection state (non-blocking)
+void handleWiFiConnection() {
+  if (wifiAttempting) {
+    uint8_t status = WiFi.status();
+    
+    if (status == WL_CONNECTED) {
+      wifiConnected = true;
+      wifiAttempting = false;
+      Serial.println("✓ WiFi connected!");
+      Serial.print("IP address: ");
+      Serial.println(WiFi.localIP());
+      
+    } else if (status == WL_CONNECT_FAILED || status == WL_NO_SSID_AVAIL) {
+      // Connection failed
+      wifiAttempting = false;
+      Serial.print("✗ WiFi attempt ");
+      Serial.print(wifiAttemptCount);
+      Serial.println(" failed");
+      WiFi.disconnect();
+    }
+    // Otherwise, still connecting...
+  } else if (!wifiConnected && !wifiGiveUp) {
+    // Check if we should start a new attempt
+    if (millis() - lastWifiAttempt > WIFI_RETRY_INTERVAL) {
+      startWiFiConnection();
+    }
+  } else if (wifiConnected) {
+    // WiFi was connected, check if still connected
+    if (WiFi.status() != WL_CONNECTED) {
+      wifiConnected = false;
+      mqttConnected = false;
+      Serial.println("✗ WiFi disconnected");
+      // Reset attempt counters on disconnect
+      wifiAttemptCount = 0;
+      mqttAttemptCount = 0;
+      wifiGiveUp = false;
+      mqttGiveUp = false;
+    }
+  }
+}
+
+// =============================================================================
+// MQTT CONNECTION FUNCTIONS
+// =============================================================================
+
+// Handle MQTT connection state (non-blocking)
+void handleMQTTConnection() {
+  if (wifiConnected && !mqttConnected && !mqttGiveUp) {
+    if (millis() - lastMqttAttempt > MQTT_RETRY_INTERVAL && 
+        mqttAttemptCount < MQTT_MAX_ATTEMPTS) {
+      
+      mqttAttemptCount++;
+      Serial.print("MQTT attempt ");
+      Serial.print(mqttAttemptCount);
+      Serial.print("/");
+      Serial.print(MQTT_MAX_ATTEMPTS);
+      Serial.print("...");
+      
+      if (client.connect("R4_Combined_Controller", mqttToken.c_str(), NULL)) {
+        mqttConnected = true;
+        Serial.println(" ✓ Connected!");
+        client.subscribe("v1/devices/me/attributes");
+      } else {
+        Serial.print(" ✗ Failed (rc=");
+        Serial.print(client.state());
+        Serial.println(")");
+        
+        if (mqttAttemptCount >= MQTT_MAX_ATTEMPTS) {
+          mqttGiveUp = true;
+          Serial.println("✗ MQTT: Maximum attempts reached, giving up");
+        }
+      }
+      lastMqttAttempt = millis();
+    }
+  } else if (mqttConnected && !client.connected()) {
+    mqttConnected = false;
+    Serial.println("✗ MQTT disconnected");
+    // Reset MQTT attempts when disconnected
+    mqttAttemptCount = 0;
+    mqttGiveUp = false;
+  }
+}
+
+// MQTT message callback
+void on_message(char* topic, uint8_t* payload, unsigned int length) {
+  char json[length + 1];
+  for (int i = 0; i < length; i++) {
+    json[i] = (char)payload[i];
+  }
+  json[length] = '\0';
+
+  // Parse JSON
+  DynamicJsonDocument doc(1024);
+  DeserializationError error = deserializeJson(doc, json);
+  if (error) return;
+
+  String command = doc[KEY_INPUT];
+  if (command == "null" || command == "") return;
+
+  // Process command from MQTT
+  String cleanCommand = removeQuotes(command);
+  processCommand(cleanCommand, true); // true = from MQTT
+}
+
+// =============================================================================
+// PING LED BLINK HANDLING
+// =============================================================================
+
+// Handle non-blocking LED blinking for PING command
+void handlePingBlink() {
+  if (pingBlinking) {
+    unsigned long currentTime = millis();
+    if (currentTime - pingBlinkStartTime >= PING_BLINK_INTERVAL) {
+      // Toggle LED state
+      pingLedState = !pingLedState;
+      digitalWrite(LED_BUILTIN, pingLedState ? HIGH : LOW);
+      pingBlinkCounter++;
+      pingBlinkStartTime = currentTime;
+
+      // Stop blinking after reaching the desired number of blinks
+      if (pingBlinkCounter >= PING_BLINK_COUNT * 2) { // Multiply by 2 for ON/OFF cycles
+        pingBlinking = false;
+        pingBlinkCounter = 0;
+        digitalWrite(LED_BUILTIN, LOW); // Ensure LED is off at the end
+      }
+    }
+  }
+}
+
+// =============================================================================
+// DHT INITIALIZATION HANDLING
+// =============================================================================
+
+// Handle non-blocking DHT sensor initialization
+void handleDHTInitialization() {
+  for (int i = 0; i < MAX_DHT_SENSORS; i++) {
+    if (dhtSensors[i].initializing && !dhtSensors[i].initialized) {
+      if (millis() - dhtSensors[i].initStartTime >= DHT_INIT_DELAY) {
+        // Initialization delay has passed, mark sensor as ready
+        dhtSensors[i].initialized = true;
+        dhtSensors[i].initializing = false;
+        Serial.println("DHT sensor on pin " + String(dhtSensors[i].pin) + " initialized");
+      }
+    }
+  }
+}
+
+// =============================================================================
+// SERIAL COMMAND HANDLING
+// =============================================================================
+
+// Handle serial commands
+void handleSerialCommands() {
+  static char commandBuffer[COMMAND_BUFFER_SIZE];
+  static uint8_t index = 0;
+
+  while (Serial.available() > 0) {
+    char receivedChar = Serial.read();
+
+    if (receivedChar == '\n' || receivedChar == '\r') {
+      if (index > 0) {  // Only process if we have content
+        commandBuffer[index] = '\0';
+        processCommand(String(commandBuffer), false); // false = from Serial
+        index = 0;
+      }
+    } else {
+      if (index < COMMAND_BUFFER_SIZE - 1) {
+        commandBuffer[index++] = receivedChar;
+      } else {
+        index = 0; // Reset on overflow
+      }
+    }
+  }
+}
+
+// Unified command processing
+void processCommand(String command, bool fromMQTT) {
+  command.trim(); // Remove any whitespace
+  
+  String* arguments = splitString(command);
+  String commandName = arguments[0];
+  String commandId = (arguments[1] != "") ? arguments[1] : "0";
+  String response = "";
+
+  // Add connection status info for ping
+  String connStatus = "";
+  if (wifiConnected) connStatus += ":WiFi";
+  if (mqttConnected) connStatus += ":MQTT";
+  if (connStatus == "") connStatus = ":SerialOnly";
+
+  // Execute command based on commandName
+  if (commandName == PING)
+  {
+    // Execute command: PING
+    // Return firmware info and connection status, initiate non-blocking LED blinking
+    response = commandName + ":" + commandId + ":" + NAME + ":" + VERSION + connStatus;
+    pingBlinking = true;
+    pingBlinkStartTime = millis();
+    pingBlinkCounter = 0;
+    pingLedState = true;
+    digitalWrite(LED_BUILTIN, HIGH); // Start with LED on
+
+  }
+  else if (commandName == GET_CONFIGS)
+  {
+    // Execute command: GET_CONFIGS
+    // Return stored WiFi credentials and token
+    response = commandName + ":" + commandId + ":" + wifiSSID + ":" + 
+               wifiPassword + ":" + mqttToken;
+
+  }
+  else if (commandName == SET_CONFIGS)
+  {
+    // Execute command: SET_CONFIGS
+    // Format: set:id:ssid:password:token
+    String new_WIFI_SSID = arguments[2];
+    String new_WIFI_PASSWORD = arguments[3];
+    String new_TOKEN = arguments[4];
+    
+    if (new_WIFI_SSID == "" || new_TOKEN == "") {
+      response = commandName + ":" + commandId + ":0:Missing parameters";
+    } else if (saveConfigToEEPROM(new_WIFI_SSID, new_WIFI_PASSWORD, new_TOKEN)) {
+      response = commandName + ":" + commandId + ":1:Saved, rebooting...";
+      sendResponse(response, fromMQTT);
+      Serial.println("Rebooting to apply new settings...");
+      delay(2000);
+      NVIC_SystemReset(); // Changed from ESP.restart()
+    } else {
+      response = commandName + ":" + commandId + ":0:Save failed";
+    }
+
+  }
+  else if (commandName == RESET_CONFIGS)
+  {
+    // Execute command: RESET_CONFIGS
+    // Reset to default configuration
+    setDefaultConfig();
+    response = commandName + ":" + commandId + ":1:Reset to defaults, rebooting...";
+    sendResponse(response, fromMQTT);
+    Serial.println("Configuration reset to defaults, rebooting...");
+    delay(2000);
+    NVIC_SystemReset();
+
+  }
+  else if (commandName == GET_STATUS)
+  {
+    // Execute command: GET_STATUS
+    // Return current connection status
+    String wifiStatus = wifiConnected ? "1" : "0";
+    String mqttStatus = mqttConnected ? "1" : "0";
+    response = commandName + ":" + commandId + ":" + wifiStatus + ":" + mqttStatus;
+
+  }
+  else if (commandName == DIGITAL_READ)
+  {
+    // Execute command: DIGITAL_READ
+    // Read digital value from specified pin
+    int pinNumber = extractPinNumber(arguments[2]);
+    pinMode(pinNumber, INPUT);
+    int digitalValue = digitalRead(pinNumber);
+    response = commandName + ":" + commandId + ":" + String(digitalValue);
+
+  }
+  else if (commandName == ANALOG_READ)
+  {
+    // Execute command: ANALOG_READ
+    // Read analog value from specified pin
+    int pinNumber = extractPinNumber(arguments[2]);
+    pinMode(pinNumber, INPUT);
+    int analogValue = analogRead(pinNumber);
+    response = commandName + ":" + commandId + ":" + String(analogValue);
+
+  }
+  else if (commandName == DIGITAL_WRITE)
+  {
+    // Execute command: DIGITAL_WRITE
+    // Write digital value to specified pin
+    int pinNumber = extractPinNumber(arguments[2]);
+    int pinValue = arguments[3].toInt();
+    pinMode(pinNumber, OUTPUT);
+    digitalWrite(pinNumber, pinValue);
+    response = commandName + ":" + commandId + ":1";
+
+  }
+  else if (commandName == ANALOG_WRITE)
+  {
+    // Execute command: ANALOG_WRITE
+    // Write PWM value to specified pin
+    int pinNumber = extractPinNumber(arguments[2]);
+    int pinValue = arguments[3].toInt();
+    pinMode(pinNumber, OUTPUT);
+    analogWrite(pinNumber, pinValue);
+    response = commandName + ":" + commandId + ":1";
+
+  } else if (commandName == R4_MATRIX_PATTERN) {
+    // Execute command: R4_MATRIX_PATTERN
+    // Write pattern to R4 LED matrix
+    String row0 = arguments[2];
+    String row1 = arguments[3];
+    String row2 = arguments[4];
+    String row3 = arguments[5];
+    String row4 = arguments[6];
+    String row5 = arguments[7];
+    String row6 = arguments[8];
+    String row7 = arguments[9];
+    writeLedMatrixPattern(row0, row1, row2, row3, row4, row5, row6, row7);
+    response = commandName + ":" + commandId + ":1";
+
+  }
+  else if (commandName == MOVE_SERVO)
+  {
+    // Execute command: MOVE_SERVO
+    // Move servo motor to specified angle with optional speed control
+    int pinNumber = extractPinNumber(arguments[2]);
+    int angle = arguments[3].toInt();
+    // Check if speed parameter is provided
+      int speed = arguments[4].toInt();
+      moveServo(pinNumber, angle, speed);
+
+    response = commandName + ":" + commandId + ":1";
+
+  }
+  else if (commandName == MOVE_ROBOTIC_ARM)
+  {
+    // Execute command: MOVE_ROBOTIC_ARM
+    // Move robotic arm to specified angles
+    moveRoboticArm(arguments);
+    response = commandName + ":" + commandId + ":1";
+
+  }
+  else if (commandName == READ_TMP36)
+  {
+    // Execute command: READ_TMP36
+    // Read temperature from TMP36 sensor
+    int pinNumber = extractPinNumber(arguments[2]);
+    int temp = readTMP36(pinNumber);
+    response = commandName + ":" + commandId + ":" + String(temp);
+
+  }
+  else if (commandName == WRITE_7_SEGMENT)
+  {
+    // Execute command: WRITE_7_SEGMENT
+    // Display number on 7-segment display
+    int CLK = extractPinNumber(arguments[2]);
+    int DIO = extractPinNumber(arguments[3]);
+    String NUM = arguments[4];
+    write7Segment(CLK, DIO, NUM);
+    response = commandName + ":" + commandId + ":1";
+
+  }
+  else if (commandName == READ_ULTRASONIC)
+  {
+    // Execute command: READ_ULTRASONIC
+    // Read distance from ultrasonic sensor
+    int trigPin = extractPinNumber(arguments[2]);
+    int echoPin = extractPinNumber(arguments[3]);
+    float sonar = readSonar(trigPin, echoPin);
+    response = commandName + ":" + commandId + ":" + String(sonar);
+
+  }
+  else if (commandName == READ_DHT11)
+  {
+    // Execute command: READ_DHT11
+    // Read temperature/humidity from DHT sensor
+    int pin = extractPinNumber(arguments[2]);
+    String dht_mode = arguments[3];
+    String dht_data = readDHT(pin, dht_mode, DHT11);
+    response = commandName + ":" + commandId + ":" + dht_data;
+
+  }
+  else if (commandName == READ_DHT22)
+  {
+    // Execute command: READ_DHT22
+    // Read temperature/humidity from DHT sensor
+    int pin = extractPinNumber(arguments[2]);
+    String dht_mode = arguments[3];
+    String dht_data = readDHT(pin, dht_mode, DHT22);
+    response = commandName + ":" + commandId + ":" + dht_data;
+
+  } 
+  else if (commandName == READ_DS18B20)
+  {
+    // Execute command: READ_DS18B20
+    // Read temperature from DS18B20 sensor
+    int pin = extractPinNumber(arguments[2]);
+    String ds18b20 = readDS18B20(pin);
+    response = commandName + ":" + commandId + ":" + ds18b20;
+
+  }
+  else if (commandName == WRITE_RGB_LED)
+  {
+    // Execute command: WRITE_RGB_LED
+    // Control RGB LED with specified color values
+    int pinR = extractPinNumber(arguments[2]);
+    int pinG = extractPinNumber(arguments[3]);
+    int pinB = extractPinNumber(arguments[4]);
+    int valueR = arguments[5].toInt();
+    int valueG = arguments[6].toInt();
+    int valueB = arguments[7].toInt();
+    writeRGBLED(pinR, pinG, pinB, valueR, valueG, valueB);
+    response = commandName + ":" + commandId + ":1";
+
+  }
+  else if (commandName == SET_MICROPHONE)
+  {
+    // Execute command: SET_MICROPHONE
+    // Enable/disable microphone monitoring
+    microphonePin = extractPinNumber(arguments[2]);
+    microphoneId = commandId;
+    EnableMicrophone = arguments[3].toInt() == 1;
+    response = commandName + ":" + commandId + ":1";
+
+  }
+  else if (commandName == GET_I2C_ADDRESS)
+  {
+    // Execute command: GET_I2C_ADDRESS
+    // Scan and return I2C device addresses
+    String addressString = scanI2C();
+    response = commandName + ":" + commandId + ":" + addressString;
+
+  }
+  else if (commandName == WRITE_LCD16x2)
+  {
+    // Execute command: WRITE_LCD16x2
+    // Write text to I2C LCD display or control backlight
+    int address = (int)strtol(arguments[2].c_str(), NULL, 16);
+    String message1 = arguments[3];
+    String message2 = arguments[4];
+    if (message1 == "$ET_BACKLIGHT") {
+      setBacklight(address, message2.toInt());
+    } else {
+      writeLiquidCrystalSmart(address, message1, message2);
+    }
+    response = commandName + ":" + commandId + ":" + message1 + ":" + message2;
+
+  }
+  else if (commandName == READ_BME280)
+  {
+    // Execute command: READ_BME280
+    // Read environmental data from BME280 sensor
+    int address = (int)strtol(arguments[2].c_str(), NULL, 16);
+    String mode = arguments[3];
+    float seaLevelPressure = arguments[4].toFloat();
+    String bme = readBME280(address, mode, seaLevelPressure);
+    response = commandName + ":" + commandId + ":" + bme;
+
+  }
+  else if (commandName == READ_BH1750) 
+  {
+    // Execute command: READ_BH1750
+    // Read light intensity from BH1750 sensor
+    String lux = readBH1750();
+    response = commandName + ":" + commandId + ":" + lux;
+
+  }
+  else if (commandName == PLAY_TONE)
+  {
+    // Execute command: PLAY_TONE
+    // Play tone on buzzer
+    int pinNumber = extractPinNumber(arguments[2]);
+    int frequency = arguments[3].toInt();
+    int duration = arguments[4].toInt();
+    if (frequency > 0) {
+      tone(pinNumber, frequency, duration);
+      response = commandName + ":" + commandId + ":1";    
+    } else {
+      noTone(pinNumber);
+      response = commandName + ":" + commandId + ":1:Stopped";
+    }
+
+  }
+  else if (commandName == MODULINO_BUZZER)
+  {
+    // Execute command: MODULINO_BUZZER
+    // Play tone on Modulino buzzer
+      // Initialize buzzer if not already done
+    if (!buzzerInitialized) {
+      buzzer.begin();
+      buzzerInitialized = true;
+      Serial.println("Modulino buzzer initialized");
+    }
+    int frequency = arguments[2].toInt();
+    int duration = arguments[3].toInt();
+    buzzer.tone(frequency, duration);
+    response = commandName + ":" + commandId + ":1";
+
+  } 
+  else if (commandName == MODULINO_BUTTONS)
+  {
+    // Execute command: MODULINO_BUTTONS
+    // Buttons A, B, C
+      // Initialize buttons if not already done
+    if (!buttonsInitialized) {
+      buttons.begin();
+      buttonsInitialized = true;
+      Serial.println("Modulino buttons initialized");
+    }
+    if (buttons.update()) {  // Update the button states
+      if (buttons.isPressed(0)) {buttonsValue[0] = 1 ;} else {buttonsValue[0] = 0; }
+      if (buttons.isPressed(1)) {buttonsValue[1] = 1 ;} else {buttonsValue[1] = 0; }
+      if (buttons.isPressed(2)) {buttonsValue[2] = 1 ;} else {buttonsValue[2] = 0; }
+    }
+    response = commandName + ":" + commandId + ":" + String(buttonsValue[0])  + ":" + String(buttonsValue[1])  + ":" + String(buttonsValue[2]);
+
+  }
+  else if (commandName == MODULINO_DISTANCE)
+  {
+    // Execute command: MODULINO_DISTANCE 
+    // distance measured by the sensor in millimeters.
+    // Initialize distance sensor if not already done
+    if (!distanceInitialized) {
+      distance.begin();
+      distanceInitialized = true;
+    }
+    if (distance.available()) {
+      response = commandName + ":" + commandId + ":" + String(distance.get(), 0);
+    } else { 
+      response = commandName + ":" + commandId + ":0:No data available";
+    }
+
+  } 
+  else if (commandName == MODULINO_MOVEMENT)
+  {
+    // Execute command: MODULINO_MOVEMENT 
+    // Read IMU data
+    String imuMode = arguments[2];
+    String imuData = readModulinoIMU(imuMode);
+    response = commandName + ":" + commandId + ":" + imuData; 
+
+  } 
+  else if (commandName == MODULINO_KNOB)
+  {
+    // Execute command: MODULINO_KNOB 
+    // Read encoder value and button state
+      // Initialize encoder (knob) if not already done
+    if (!knobInitialized) {
+      encoder.begin();
+      knobInitialized = true;
+      Serial.println("Modulino encoder initialized");
+    }
+    encoderValue = encoder.get();
+    if (encoderValue > 100 || encoderValue < 0) {
+      encoder.set(0);
+      response = commandName + ":" + commandId + ":" + encoderValue + ":" + encoderButton ; 
+    }
+    // Check if the encoder button is pressed and store the result in 'click'
+    if (encoder.isPressed()) {encoderButton = 1 ;} else {encoderButton = 0; }
+    response = commandName + ":" + commandId + ":" + encoderValue + ":" + encoderButton ; 
+  
+  } 
+  else if (commandName == MODULINO_THERMO)
+  {
+    // Execute command: MODULINO_THERMO
+    // Read temperature data from Modulino Thermo
+    String thermoMode = arguments[2];
+    String thermoData = readModulinoThermo(thermoMode);
+    response = commandName + ":" + commandId + ":" + thermoData; 
+
+  } 
+  else if (commandName == MODULINO_PIXELS)
+  {
+    // Execute command: MODULINO_PIXELS
+    // Control Modulino Pixels
+    String pixel      = arguments[2];
+    int red_pixel     = arguments[3].toInt();
+    int green_pixel   = arguments[4].toInt();
+    int blue_pixel    = arguments[5].toInt();
+    int brightness    = arguments[6].toInt();
+    writeModulinoPixels( pixel, red_pixel, green_pixel, blue_pixel, brightness );
+    response = commandName + ":" + commandId + ":" + pixel; 
+
+  } 
+  else
+  {
+    // Unknown command
+    // Return error message for unrecognized commands
+    response = commandName + ":" + commandId + ":0:Unknown command";
+  }
+
+  // Send response
+  sendResponse(response, fromMQTT);
+  
+  // Free the memory allocated for the splitString function
+  delete[] arguments;
+}
+
+// Send response to appropriate interface
+void sendResponse(String response, bool toMQTT) {
+  // Check if response is same as last response and add ":" if so
+  if (response == lastResponse) {
+    response += ":";
+  }
+  lastResponse = response;
+  
+  // Always send to Serial
+  Serial.println(response);
+  
+  // Send to MQTT if requested and connected
+  if (toMQTT && mqttConnected && client.connected()) {
+    String payload = "{\"" + String(KEY_OUTPUT) + "\":\"" + response + "\"}";
+    client.publish("v1/devices/me/attributes", payload.c_str());
+  }
+}
+
+// =============================================================================
+// UTILITY FUNCTIONS
+// =============================================================================
+
+String *splitString(String input) {
+  input.trim();
+  int numStrings = 1;
+  for (int i = 0; i < input.length(); i++) {
+    if (input.charAt(i) == ':') {
+      numStrings++;
+    }
+  }
+  String *dataArray = new String[numStrings];
+
+  int index = 0;
+  int lastIndex = 0;
+  int arrayIndex = 0;
+
+  while (index < input.length() && arrayIndex < numStrings) {
+    index = input.indexOf(':', lastIndex);
+    if (index == -1) {
+      dataArray[arrayIndex] = input.substring(lastIndex); // Storing the last substring
+      break;
+    } else {
+      dataArray[arrayIndex] = input.substring(lastIndex, index); // Storing the substring
+      lastIndex = index + 1;
+    }
+    arrayIndex++;
+  }
+  
+  // Fill remaining slots with empty strings
+  for (int i = arrayIndex + 1; i < numStrings; i++) {
+    dataArray[i] = "";
+  }
+
+  return dataArray;
+}
+
+int extractPinNumber(String input) {
+  String resultStr = "";
+  for (int i = 0; i < input.length(); i++) {
+    if (isDigit(input.charAt(i))) {
+      resultStr += input.charAt(i);
+    }
+  }
+  return resultStr.toInt();
+}
+
+String removeQuotes(String input) {
+  String result = "";
+  for (int i = 0; i < input.length(); i++) {
+    char c = input.charAt(i);
+    if (c != '"') {
+      result += c;
+    }
+  }
+  return result;
+}
+
+// =============================================================================
+// SENSOR & ACTUATOR FUNCTIONS
+// =============================================================================
+
+// Move servo motor to specified angle with optional speed control
+void moveServo(int pin, int angle, int speed = 255) {
+  // First, check if this pin is already assigned to a servo
+  int servo_index = -1;
+  
+  // Look for this pin in our mapping
+  for (int i = 0; i < MAX_SERVOS; i++) {
+    if (servo_pin_mapping[i] == pin) {
+      servo_index = i;
+      break;
+    }
+  }
+  
+  // If pin wasn't found, find a free slot
+  if (servo_index == -1) {
+    for (int i = 0; i < MAX_SERVOS; i++) {
+      if (!servo_pins_used[i]) {
+        servo_index = i;
+        servo_pin_mapping[i] = pin;
+        servo_pins_used[i] = true;
+        servo_motors[i].attach(pin);
+        break;
+      }
+    }
+  }
+  
+  // If we found a slot (or it was already assigned), move or detach the servo
+  if (servo_index != -1) {
+    if (angle == 0) {
+      servo_motors[servo_index].detach(); // Detach servo if angle is 0
+      servo_pins_used[servo_index] = false; // Mark slot as free
+      servo_pin_mapping[servo_index] = -1; // Clear pin mapping
+    } else {
+      servo_motors[servo_index].write(angle, speed);
+      // servo_motors[servo_index].wait();
+    }
+  } else {
+    // No free slots - could send an error message back
+    Serial.println(String(MOVE_SERVO) + ":" + "error:No free servo slots");
+  }
+}
+
+void moveRoboticArm(String* arguments) {
+  if (arguments[2] != "null") {
+    int pin1 = extractPinNumber(arguments[2]);
+    int angle1 = arguments[3].toInt();
+    moveServo(pin1, angle1);
+  }
+  if (arguments[4] != "null") {
+    int pin2 = extractPinNumber(arguments[4]);
+    int angle2 = arguments[5].toInt();
+    moveServo(pin2, angle2);
+  }
+  if (arguments[6] != "null") {
+    int pin3 = extractPinNumber(arguments[6]);
+    int angle3 = arguments[7].toInt();
+    moveServo(pin3, angle3);
+  }
+  if (arguments[8] != "null") {
+    int pin4 = extractPinNumber(arguments[8]);
+    int angle4 = arguments[9].toInt();
+    moveServo(pin4, angle4);
+  }
+  if (arguments[10] != "null") {
+    int pin5 = extractPinNumber(arguments[10]);
+    int angle5 = arguments[11].toInt();
+    moveServo(pin5, angle5);
+  }
+  if (arguments[12] != "null") {
+    int pin6 = extractPinNumber(arguments[12]);
+    int angle6 = arguments[13].toInt();
+    moveServo(pin6, angle6);
+  }
+}
+
+int readTMP36(int pin) {
+  pinMode(pin, INPUT);
+  int sensorInput = analogRead(pin);
+  // Adjusted for UNO R4 (3.3V reference)
+  int temp36 = (((((double)sensorInput / 1024) * 5) - 0.5) * 100);
+  return temp36;
+}
+
+void write7Segment(int CLK, int DIO, String NUM) {
+  int number = NUM.toInt();
+  TM1637 tm1637(CLK, DIO);
+  tm1637.init();
+  tm1637.set(BRIGHT_TYPICAL);
+  tm1637.displayNum(number);
+  if (NUM != "end") {
+    if (number != 0) {
+      tm1637.displayNum(number);
+    }
+    if (number == 0) {
+      tm1637.display(3, number);
+    }
+  }
+  if (NUM == "end") {
+    digitalWrite(CLK, LOW);
+    digitalWrite(DIO, LOW);
+  }
+}
+
+float readSonar(int trigPin, int echoPin) { 
+  float duration, distance;
+  pinMode(trigPin, OUTPUT);
+  pinMode(echoPin, INPUT);
+  digitalWrite(trigPin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPin, LOW);
+  duration = pulseIn(echoPin, HIGH);
+  distance = duration * 0.0343 / 2;
+  return distance;
+}
+
+// Initialize DHT array (call this in setup() function)
+void initializeDHTArray()
+{
+  if (!dhtArrayInitialized) {
+    for (int i = 0; i < MAX_DHT_SENSORS; i++) {
+      dhtSensors[i].pin = 0;
+      dhtSensors[i].sensor = nullptr;
+      dhtSensors[i].initialized = false;
+      dhtSensors[i].initializing = false;
+      dhtSensors[i].initStartTime = 0;
+    }
+    dhtArrayInitialized = true;
+  }
+}
+
+// Read temperature or humidity from DHT sensor (non-blocking)
+String readDHT(int pin, String mode, int DHTTYPE)
+{
+  // Find existing sensor or create new one
+  DHT* dhtSensor = nullptr;
+  int sensorIndex = -1;
+  
+  // Look for existing sensor
+  for (int i = 0; i < MAX_DHT_SENSORS; i++) {
+    if (dhtSensors[i].pin == pin && dhtSensors[i].initialized) {
+      dhtSensor = dhtSensors[i].sensor;
+      sensorIndex = i;
+      break;
+    }
+  }
+  
+  // If not found, create new sensor
+  if (dhtSensor == nullptr) {
+    for (int i = 0; i < MAX_DHT_SENSORS; i++) {
+      if (!dhtSensors[i].initialized && !dhtSensors[i].initializing) {
+        dhtSensors[i].pin = pin;
+        dhtSensors[i].sensor = new DHT(pin, DHTTYPE);
+        dhtSensors[i].sensor->begin();
+        dhtSensors[i].initializing = true; // Mark as initializing
+        dhtSensors[i].initStartTime = millis(); // Record start time
+        sensorIndex = i;
+        dhtSensor = dhtSensors[i].sensor;
+        break;
+      }
+    }
+  }
+  
+  if (dhtSensor == nullptr) {
+    return "Too many DHT sensors";
+  }
+  
+  // Check if sensor is still initializing
+  if (dhtSensors[sensorIndex].initializing) {
+    return "Sensor initializing";
+  }
+  
+  // Read sensor data
+  if (mode == "T") {
+    float temp = dhtSensor->readTemperature();
+    if (isnan(temp)) {
+      return "Error";
+    }
+    return String(temp);
+  } else if (mode == "H") {
+    float humidity = dhtSensor->readHumidity();
+    if (isnan(humidity)) {
+      return "Error";
+    }
+    return String(humidity);
+  } else {
+    return "Invalid mode";
+  }
+}
+
+String readDS18B20(int ONE_WIRE_BUS) {
+  OneWire oneWire(ONE_WIRE_BUS);
+  DallasTemperature sensors(&oneWire);
+  sensors.requestTemperatures();
+  return String(sensors.getTempCByIndex(0));
+}
+
+void writeRGBLED(int pinR, int pinG, int pinB, int valueR, int valueG, int valueB) {
+  pinMode(pinR, OUTPUT);
+  pinMode(pinG, OUTPUT);
+  pinMode(pinB, OUTPUT);
+  analogWrite(pinR, valueR);
+  analogWrite(pinG, valueG);
+  analogWrite(pinB, valueB);
+}
+
+void readMicrophone() {
+  pinMode(microphonePin, INPUT);
+  int sound = analogRead(microphonePin);
+  String result = String(SET_MICROPHONE) + ":" + String(microphoneId) + ":" + String(sound);
+  Serial.println(result);
+}
+
+String scanI2C() {
+  String addressesString = "";
+  Wire.begin();
+  byte error, address;
+  int nDevices = 0;
+
+  for (address = 1; address < 127; address++) {
+    Wire.beginTransmission(address);
+    error = Wire.endTransmission();
+
+    if (error == 0) {
+      if (nDevices > 0)
+        addressesString += ":";
+      addressesString += "0x";
+      if (address < 16)
+        addressesString += "0";
+      addressesString += String(address, HEX);
+      nDevices++;
+    } else if (error == 4) {
+      addressesString += ":Unknown error at address 0x";
+      if (address < 16)
+        addressesString += "0";
+      addressesString += String(address, HEX);
+    }
+  }
+
+  if (nDevices == 0)
+    addressesString = "No I2C devices found";
+
+  return addressesString;
+}
+
+String readBME280(int address, String mode, float seaLevelPressure) {
+  unsigned status = bme.begin(address);
+  if (mode == "T") {
+    return String(bme.readTemperature());
+  } else if (mode == "P") {
+    return String(bme.readPressure() / 100.0F);
+  } else if (mode == "A") {
+    return String(bme.readAltitude(seaLevelPressure));
+  } else if (mode == "H") {
+    return String(bme.readHumidity());
+  } else {
+    return "Invalid mode";
+  }
+}
+
+// Modulino Functions ------------------------------------------
+
+// void modulinoBegin() {
+//   // Begin Modulino components and LED Matrix
+//   Modulino.begin();
+//   distance.begin();
+//   buttons.begin();
+//   encoder.begin();
+//   imu.begin();
+//   thermo.begin();
+//   buzzer.begin();
+//   leds.begin();
+//   leds.clear();
+//   leds.show();
+// }
+// Initialize Modulino components only once
+
+
+
+String readModulinoThermo(String mode) {
+  // Initialize thermo sensor if not already done
+  if (!thermoInitialized) {
+    thermo.begin();
+    thermoInitialized = true;
+  }
+
+  if (mode == "T") {
+    String temperature = String(thermo.getTemperature(), 1) ;
+    return temperature;
+  } else if (mode == "H") {
+    String humidity = String(thermo.getHumidity(), 0) ;
+    return humidity;
+  } else {
+    return "Invalid mode";
+  }
+}
+
+String readModulinoIMU(String mode) {
+  // Initialize movement sensor (IMU) if not already done
+  if (!movementInitialized) {
+    imu.begin();
+    movementInitialized = true;
+  }
+
+  imu.update(); // Update IMU sensor data
+  // X,Y,Z axes acceleration & angular velocity around X, Y, Z axes.
+  if (mode == "A") { // Acceleration
+    return String(imu.getX(), 3) + ":" + String(imu.getY(), 3) + ":" + String(imu.getZ(), 3);
+  } else if (mode == "V") { // Angular Velocity
+    return String(imu.getRoll(), 3) + ":" + String(imu.getPitch(), 3) + ":" + String(imu.getYaw(), 3);
+  } else {
+    return "Invalid mode";
+  }
+}
+
+void writeModulinoPixels( String pixel, int red, int green, int blue, int brightness ) {
+  // Initialize pixels if not already done
+  if (!pixelsInitialized) {
+    leds.begin();
+    leds.clear();
+    leds.show();
+    pixelsInitialized = true;
+  }
+
+  if (pixel == "clear") {
+    leds.clear();
+  } else {
+    int numpixel = pixel.toInt();
+    leds.set( numpixel, red, green, blue, brightness );
+  }
+  leds.show(); // Display the LEDs
+}
+
+// LED Matrix Functions ------------------------------------------
+
+void writeLedMatrixPattern(String row0, String row1, String row2, String row3, String row4, String row5, String row6, String row7) {
+  // Setup
+  matrix.clear();
+  
+  // Create array of row strings
+  String rows[] = {row0, row1, row2, row3, row4, row5, row6, row7};
+  byte frame[8][12] = {0};  // Initialize all elements to 0
+
+  // Process each row
+  for (uint8_t row = 0; row < 8; row++) {
+    uint16_t hexValue = (uint16_t)strtoul(rows[row].c_str(), NULL, 16);
+    for (uint8_t col = 0; col < 12; col++) {
+      frame[row][col] = (hexValue & (1 << col)) ? 1 : 0;
+    }
+  }
+  // Render the pattern to LED matrix
+  matrix.renderBitmap(frame, 8, 12);
+}
+
+// =============================================================================
+// END OF FILE
+// =============================================================================
